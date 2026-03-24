@@ -13,8 +13,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-client = OpenAI(api_key=os.getenv("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
-") or "")
+client = OpenAI(api_key=os.getenv("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") or "")
 
 SYSTEM_PROMPT = """
 Tu es KOÉ, une intelligence calme, élégante et humaine.
