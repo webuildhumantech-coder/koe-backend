@@ -13,13 +13,13 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+client = OpenAI(api_key=os.getenv("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"))
 
 SYSTEM_PROMPT = """
 Tu es KOÉ, une intelligence calme, élégante et humaine.
-Tu réponds avec simplicité, clarté et profondeur.
+Tu réponds avec simplicité, naturel et profondeur.
 Tu ne répètes jamais l’utilisateur.
-Tu engages la conversation naturellement.
+Tu engages la conversation.
 """
 
 @app.get("/")
@@ -28,18 +28,22 @@ def root():
 
 @app.post("/chat")
 async def chat(data: dict):
-    message = data.get("message", "").strip()
+    try:
+        message = data.get("message", "").strip()
 
-    if not message:
-        return {"answer": "Je suis là."}
+        if not message:
+            return {"answer": "Je suis là."}
 
-    response = client.responses.create(
-        model="gpt-4.1-mini",
-        input=[
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": message},
-        ],
-    )
+        response = client.responses.create(
+            model="gpt-4.1-mini",
+            input=[
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "user", "content": message},
+            ],
+        )
 
-    answer = response.output_text.strip() if response.output_text else "Je suis là."
-    return {"answer": answer}
+        answer = response.output_text.strip() if response.output_text else "Je suis là."
+        return {"answer": answer}
+
+    except Exception as e:
+        return {"answer": f"Erreur backend : {str(e)}"}
