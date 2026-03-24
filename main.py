@@ -13,7 +13,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-client = OpenAI(api_key=os.getenv("") or "")
+client = OpenAI(api_key=os.getenv("OPENAI_API_KEY") or "")
 
 SYSTEM_PROMPT = """
 Tu es KOÉ, une intelligence calme, élégante et humaine.
