@@ -2,6 +2,12 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from openai import OpenAI
 import os
+from supabase import create_client
+
+SUPABASE_URL = "https://zxuysoqknkzjmpftqupl.supabase.co"
+SUPABASE_KEY = "sb_publishable_rrh5vevB5bc5E1xauwOaPw_EyG3xSW8"
+
+supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 app = FastAPI()
 
@@ -22,17 +28,25 @@ Tu ne répètes jamais l’utilisateur.
 Tu engages la conversation naturellement.
 """
 
-@app.get("/")
-def root():
-    return {"status": "KOÉ backend is running"}
-
 @app.post("/chat")
 async def chat(data: dict):
     try:
         message = data.get("message", "").strip()
 
         if not message:
-            return {"answer": "Je suis là."}
+            return {"answer": "No message"}
+
+        emotion = "neutre"
+
+        try:
+            supabase.table("memories").insert({
+                "user_id": "default",
+                "message": message,
+                "emotion": emotion
+            }).execute()
+            print("INSERT SUPABASE OK")
+        except Exception as e:
+            print("ERREUR SUPABASE :", e)
 
         response = client.responses.create(
             model="gpt-4.1-mini",
@@ -42,7 +56,8 @@ async def chat(data: dict):
             ],
         )
 
-        answer = response.output_text.strip() if response.output_text else "Je suis là."
+        answer = response.output_text.strip()
+
         return {"answer": answer}
 
     except Exception as e:
