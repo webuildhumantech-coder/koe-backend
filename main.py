@@ -6,7 +6,6 @@ from supabase import create_client
 
 SUPABASE_URL = "https://zxuysoqknkzjmpftqupl.supabase.co"
 SUPABASE_KEY = "sb_publishable_rrh5vevB5bc5E1xauwOaPw_EyG3xSW8"
-
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 app = FastAPI()
@@ -27,6 +26,7 @@ Tu réponds avec simplicité, clarté et profondeur.
 Tu ne répètes jamais l’utilisateur.
 Tu engages la conversation naturellement.
 """
+print("SUPABASE TEST LIVE")
 
 @app.post("/chat")
 async def chat(data: dict):
