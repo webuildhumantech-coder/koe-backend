@@ -10,7 +10,7 @@ from openai import OpenAI
 # ========================
 
 SUPABASE_URL = "https://zxuysoqknkzjmpftqupl.supabase.co"
-SUPABASE_KEY = "METS_ICI_TA_CLE_SUPABASE_PUBLISHABLE"
+SUPABASE_KEY = "sb_publishable_rrh5vevB5bc5E1xauwOaPw_EyG3xSW8"
 
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
@@ -40,11 +40,23 @@ Quand une information fiable sur l’utilisateur est connue
 # ========================
 
 def extract_name(message: str):
-    cleaned = message.replace("\\'", "'").replace("\\", "")
-    match = re.search(r"je m['’]appelle\s+([A-Za-zÀ-ÿ\-]+)", cleaned, re.IGNORECASE)
-    if match:
-        return match.group(1).strip()
+    message = message.lower()
+
+    patterns = [
+        r"je m['’]appelle\s+([a-zà-ÿ\-]+)",
+        r"mon prénom est\s+([a-zà-ÿ\-]+)",
+        r"c['’]est\s+([a-zà-ÿ\-]+)"
+    ]
+
+    for pattern in patterns:
+        match = re.search(pattern, message)
+        if match:
+            return match.group(1).capitalize()
+
     return None
+    extracted_name = extract_name(message)
+    
+    print(">>> EXTRACTED NAME:", extracted_name)
 
 # ========================
 # ROUTES
