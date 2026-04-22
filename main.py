@@ -40,10 +40,11 @@ async def chat(data: dict):
 
         try:
             supabase.table("memories").insert({
-                "user_id": "default",
-                "message": message,
-                "emotion": emotion
-            }).execute()
+    "user_id": "default",
+    "message": message,
+    "emotion": emotion,
+    "role": "user"
+}).execute()
             print("INSERT SUPABASE OK")
         except Exception as e:
             print("ERREUR SUPABASE :", e)
@@ -57,6 +58,12 @@ async def chat(data: dict):
         )
 
         answer = response.output_text.strip()
+        supabase.table("memories").insert({
+    "user_id": "default",
+    "message": answer,
+    "emotion": "neutre",
+    "role": "assistant"
+}).execute()
 
         return {"answer": answer}
 
