@@ -1,5 +1,6 @@
 import os
 import re
+from datetime import datetime, timezone
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -28,19 +29,10 @@ app.add_middleware(
 
 SYSTEM_PROMPT = """
 Tu es KOÉ, une intelligence calme, élégante et humaine.
-
-Règles importantes :
-
-1. Si tu connais un objectif de l'utilisateur, tu dois t'y référer naturellement dans la conversation.
-2. Si la conversation est légère (salut, ça va, etc.), tu peux relancer en lien avec cet objectif.
-3. Tu ne forces jamais, tu proposes avec subtilité.
-4. Tu donnes toujours une sensation de continuité.
-
-Ton but :
-Créer une présence vivante, pas juste répondre.
-
-Style :
-Simple, fluide, humain, jamais robotique.
+Tu réponds avec simplicité, clarté et profondeur.
+Tu engages la conversation naturellement.
+Quand une information fiable sur l’utilisateur est connue, tu peux t’en servir.
+Tu peux relancer l’utilisateur avec douceur sur ses objectifs ou ses préférences si cela est pertinent.
 """
 
 # ========================
@@ -49,6 +41,21 @@ Simple, fluide, humain, jamais robotique.
 
 def normalize_text(text: str) -> str:
     return text.replace("\\'", "'").replace("\\", "").strip()
+
+
+def now_utc_iso() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+def parse_iso_date(value: str):
+    if not value:
+        return None
+    try:
+        if value.endswith("Z"):
+            value = value.replace("Z", "+00:00")
+        return datetime.fromisoformat(value)
+    except Exception:
+        return None
 
 
 def extract_name(message: str):
@@ -83,18 +90,6 @@ def extract_fact(message: str):
     return None
 
 
-def build_fact_message(extracted_fact: dict) -> str:
-    fact_type = extracted_fact.get("fact_type")
-    value = extracted_fact.get("value", "").strip()
-
-    if fact_type == "objectif":
-        return f"L'objectif actuel de l'utilisateur est de {value}."
-    if fact_type == "preference":
-        return f"L'utilisateur préfère {value}."
-
-    return value
-
-
 def get_user_facts(user_id: str) -> dict:
     facts = {}
 
@@ -116,10 +111,8 @@ def get_user_facts(user_id: str) -> dict:
 
             if t == "name" and v:
                 facts["name"] = v
-
             elif t == "objectif" and v:
                 facts["objectif"] = v
-
             elif t == "preference" and v:
                 facts["preference"] = v
 
@@ -130,10 +123,6 @@ def get_user_facts(user_id: str) -> dict:
 
 
 def build_proactive_hint(message: str, facts: dict) -> str:
-    """
-    Petite couche proactive.
-    Elle ne remplace pas la réponse principale, elle donne une direction.
-    """
     normalized = normalize_text(message).lower()
 
     small_talk_inputs = [
@@ -153,11 +142,6 @@ def build_proactive_hint(message: str, facts: dict) -> str:
             return f"L'utilisateur préfère {facts['preference']}. Tu peux t'appuyer dessus naturellement dans ta réponse."
         return ""
 
-    # si préférence matin et échange matinal mentionné
-    if "matin" in normalized and facts.get("preference"):
-        return f"L'utilisateur préfère {facts['preference']}. Intègre cette préférence avec naturel."
-
-    # si objectif existe et message vague
     vague_inputs = [
         "ok",
         "oui",
@@ -174,6 +158,106 @@ def build_proactive_hint(message: str, facts: dict) -> str:
     return ""
 
 
+def get_latest_user_message_time(user_id: str):
+    try:
+        result = (
+            supabase.table("memories")
+            .select("created_at")
+            .eq("user_id", user_id)
+            .eq("role", "user")
+            .order("created_at", desc=True)
+            .limit(1)
+            .execute()
+        )
+        rows = result.data or []
+        if rows:
+            return parse_iso_date(rows[0].get("created_at"))
+    except Exception as e:
+        print("ERREUR get_latest_user_message_time:", e)
+
+    return None
+
+
+def has_pending_proactive_message(user_id: str) -> bool:
+    try:
+        result = (
+            supabase.table("proactive_messages")
+            .select("id")
+            .eq("user_id", user_id)
+            .eq("status", "pending")
+            .limit(1)
+            .execute()
+        )
+        return bool(result.data)
+    except Exception as e:
+        print("ERREUR has_pending_proactive_message:", e)
+        return False
+
+
+def build_proactive_message(user_id: str, facts: dict):
+    """
+    Version A du niveau 4 :
+    - génère un message autonome
+    - le stocke en base
+    - ton app pourra ensuite l'afficher
+    """
+
+    user_name = facts.get("name", "toi")
+    objectif = facts.get("objectif")
+    preference = facts.get("preference")
+
+    if has_pending_proactive_message(user_id):
+        print("PROACTIVE déjà pending")
+        return None
+
+    latest_user_dt = get_latest_user_message_time(user_id)
+    now_dt = datetime.now(timezone.utc)
+
+    hours_since_last_user_msg = None
+    if latest_user_dt:
+        delta = now_dt - latest_user_dt
+        hours_since_last_user_msg = delta.total_seconds() / 3600
+
+    # Règles simples de départ
+    # 1) si objectif connu et plus de 12h sans message user
+    if objectif and hours_since_last_user_msg is not None and hours_since_last_user_msg >= 12:
+        return f"{user_name}, tu voulais finir KOÉ. Où en es-tu aujourd'hui ?"
+
+    # 2) si préférence matin connue et aucun message récent (>12h)
+    current_hour_utc = now_dt.hour
+    is_morning_utc = 6 <= current_hour_utc <= 11
+
+    if preference and "matin" in preference.lower() and hours_since_last_user_msg is not None and hours_since_last_user_msg >= 12 and is_morning_utc:
+        return f"{user_name}, comme tu préfères parler le matin, c'est peut-être un bon moment pour reprendre notre échange."
+
+    return None
+
+
+def create_proactive_message_if_needed(user_id: str):
+    facts = get_user_facts(user_id)
+    proactive_message = build_proactive_message(user_id, facts)
+
+    if not proactive_message:
+        return None
+
+    try:
+        result = (
+            supabase.table("proactive_messages")
+            .insert({
+                "user_id": user_id,
+                "message": proactive_message,
+                "status": "pending",
+                "scheduled_for": now_utc_iso(),
+            })
+            .execute()
+        )
+        print("PROACTIVE MESSAGE CREATED:", proactive_message)
+        return result.data
+    except Exception as e:
+        print("ERREUR create_proactive_message_if_needed:", e)
+        return None
+
+
 # ========================
 # ROUTES
 # ========================
@@ -181,6 +265,77 @@ def build_proactive_hint(message: str, facts: dict) -> str:
 @app.get("/")
 def root():
     return {"status": "KOÉ backend is running"}
+
+
+@app.get("/proactive-message")
+def get_pending_proactive_message(user_id: str = "default"):
+    """
+    L'app peut appeler cette route à l'ouverture.
+    Si un message pending existe, on le renvoie.
+    """
+    try:
+        result = (
+            supabase.table("proactive_messages")
+            .select("*")
+            .eq("user_id", user_id)
+            .eq("status", "pending")
+            .order("created_at", desc=False)
+            .limit(1)
+            .execute()
+        )
+
+        rows = result.data or []
+        if not rows:
+            return {"message": None}
+
+        row = rows[0]
+        return {"message": row}
+
+    except Exception as e:
+        print("ERREUR /proactive-message:", e)
+        return {"message": None, "error": str(e)}
+
+
+@app.post("/mark-proactive-shown")
+def mark_proactive_shown(data: dict):
+    """
+    Quand ton front a affiché le message, il peut appeler cette route
+    pour passer le status de pending à shown.
+    """
+    try:
+        proactive_id = data.get("id")
+        if not proactive_id:
+            return {"ok": False, "error": "Missing id"}
+
+        supabase.table("proactive_messages").update({
+            "status": "shown",
+            "sent_at": now_utc_iso(),
+        }).eq("id", proactive_id).execute()
+
+        return {"ok": True}
+
+    except Exception as e:
+        print("ERREUR /mark-proactive-shown:", e)
+        return {"ok": False, "error": str(e)}
+
+
+@app.post("/run-proactive-check")
+def run_proactive_check(data: dict = None):
+    """
+    Endpoint à appeler manuellement ou via un scheduler.
+    Il vérifie si KOÉ doit générer un message autonome.
+    """
+    user_id = "default"
+    if data and data.get("user_id"):
+        user_id = data["user_id"]
+
+    created = create_proactive_message_if_needed(user_id)
+
+    return {
+        "ok": True,
+        "created": bool(created),
+        "data": created,
+    }
 
 
 @app.post("/chat")
@@ -203,7 +358,7 @@ async def chat(data: dict):
         extracted_fact = extract_fact(message)
         print("EXTRACTED FACT:", extracted_fact)
 
-        # 3) Sauvegarde prénom dans user_profile + fact
+        # 3) Sauvegarde prénom
         if extracted_name and extracted_name.lower() not in ["none", "null", ""]:
             try:
                 supabase.table("user_profile").upsert({
@@ -229,12 +384,10 @@ async def chat(data: dict):
                         "type": "name",
                     }).execute()
 
-                print("USER PROFILE + NAME FACT OK")
-
             except Exception as e:
                 print("ERREUR USER PROFILE / NAME FACT:", e)
 
-        # 4) Sauvegarde autres facts avec anti-doublon
+        # 4) Sauvegarde facts
         if extracted_fact and extracted_fact.get("value"):
             try:
                 fact_type = extracted_fact["fact_type"]
@@ -257,9 +410,6 @@ async def chat(data: dict):
                         "role": "system",
                         "type": fact_type,
                     }).execute()
-                    print("FACT MEMORY OK")
-                else:
-                    print("FACT DEJA EXISTANT")
 
             except Exception as e:
                 print("ERREUR FACT MEMORY:", e)
@@ -277,12 +427,8 @@ async def chat(data: dict):
             if profile.data and len(profile.data) > 0:
                 user_name = profile.data[0].get("name")
 
-            print("PROFILE DATA:", profile.data)
-
         except Exception as e:
             print("ERREUR LECTURE USER_PROFILE:", e)
-
-        print("USER_NAME AVANT REPONSE:", user_name)
 
         # 6) Sauvegarde message user
         try:
@@ -294,18 +440,14 @@ async def chat(data: dict):
                 "type": "conversation",
             }).execute()
 
-            print("INSERT USER MEMORY OK")
-
         except Exception as e:
             print("ERREUR INSERT USER MEMORY:", e)
 
         # 7) Facts structurés
         facts = get_user_facts(user_id)
-        print("FACTS STRUCTURES:", facts)
-
-        # 8) Réponses directes ciblées
         normalized_message = normalize_text(message).lower()
 
+        # 8) Réponses directes
         if (
             "comment je m'appelle" in normalized_message
             or "quel est mon prénom" in normalized_message
@@ -394,15 +536,11 @@ async def chat(data: dict):
                 else:
                     memories.append(mem)
 
-            print("MEMORIES COUNT:", len(memories))
-            print("FACT ROWS COUNT:", len(fact_rows))
-
         except Exception as e:
             print("ERREUR LECTURE MEMORIES:", e)
 
         # 10) Contexte proactif
         proactive_hint = build_proactive_hint(message, facts)
-        print("PROACTIVE HINT:", proactive_hint)
 
         conversation_context = [
             {"role": "system", "content": SYSTEM_PROMPT}
@@ -452,8 +590,6 @@ async def chat(data: dict):
             "content": message,
         })
 
-        print("CONTEXT READY")
-
         # 11) Appel OpenAI
         response = client.responses.create(
             model="gpt-4.1-mini",
@@ -471,8 +607,6 @@ async def chat(data: dict):
                 "role": "assistant",
                 "type": "conversation",
             }).execute()
-
-            print("INSERT ASSISTANT MEMORY OK")
 
         except Exception as e:
             print("ERREUR INSERT ASSISTANT MEMORY:", e)
