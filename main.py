@@ -204,7 +204,7 @@ def build_proactive_message(user_id: str, facts: dict):
         return None
 
     if objectif:
-        return f"{user_name}, tu voulais avancer sur {objectif}. Où en es-tu aujourd'hui ?}
+        return f"{user_name}, tu voulais avancer sur {objectif}. Où en es-tu aujourd'hui ?"
 
     if preference:
         return f"{user_name}, je me souviens que tu préfères {preference}. On profite de ce moment pour reprendre ?"
