@@ -11,7 +11,7 @@ from openai import OpenAI
 # ========================
 
 SUPABASE_URL = "https://zxuysoqknkzjmpftqupl.supabase.co"
-SUPABASE_KEY = "REMPLACE_ICI_PAR_TA_VRAIE_CLE_PUBLISHABLE_SUPABASE"
+SUPABASE_KEY = "sb_publishable_rrh5vevB5bc5E1xauwOaPw_EyG3xSW8"
 
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY") or "")
