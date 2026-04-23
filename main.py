@@ -133,11 +133,11 @@ async def chat(data: dict):
 
             try:
                 supabase.table("memories").insert({
-                    "user_id": user_id,
-                    "message": answer,
-                    "emotion": "neutre",
-                    "role": "assistant"
-                }).execute()
+    "user_id": user_id,
+    "message": message,
+    "role": "user",
+    "type": "conversation"
+}).execute()
                 print("INSERT ASSISTANT DIRECT OK")
             except Exception as e:
                 print("ERREUR INSERT ASSISTANT DIRECT:", e)
@@ -198,11 +198,11 @@ async def chat(data: dict):
         # 9) Sauvegarder la réponse assistant
         try:
             supabase.table("memories").insert({
-                "user_id": user_id,
-                "message": answer,
-                "emotion": "neutre",
-                "role": "assistant"
-            }).execute()
+    "user_id": user_id,
+    "message": answer,
+    "role": "assistant",
+    "type": "conversation"
+}).execute()
             print("INSERT ASSISTANT MEMORY OK")
         except Exception as e:
             print("ERREUR INSERT ASSISTANT MEMORY:", e)
