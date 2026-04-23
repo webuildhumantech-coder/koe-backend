@@ -113,11 +113,12 @@ async def chat(data: dict):
         # 4) Sauvegarder le message user dans memories
         try:
             supabase.table("memories").insert({
-                "user_id": user_id,
-                "message": message,
-                "emotion": emotion,
-                "role": "user"
-            }).execute()
+    "user_id": user_id,
+    "message": f"Le prénom de l'utilisateur est {extracted_name}",
+    "emotion": "neutre",
+    "role": "system",
+    "type": "fact"
+}).execute()
             print("INSERT USER MEMORY OK")
         except Exception as e:
             print("ERREUR INSERT USER MEMORY:", e)
