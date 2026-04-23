@@ -120,20 +120,38 @@ async def chat(data: dict):
 
         # 4) Sauvegarde autres faits
         if extracted_fact and extracted_fact.get("value"):
-            try:
-                fact_message = f"{extracted_fact['fact_type']}:{extracted_fact['value']}"
+    try:
+        # Construction phrase
+        if extracted_fact["fact_type"] == "objectif":
+            fact_message = f"L'objectif actuel de l'utilisateur est de {extracted_fact['value']}."
+        elif extracted_fact["fact_type"] == "preference":
+            fact_message = f"L'utilisateur préfère {extracted_fact['value']}."
+        else:
+            fact_message = extracted_fact["value"]
 
-                supabase.table("memories").insert({
-                    "user_id": user_id,
-                    "message": fact_message,
-                    "emotion": "neutre",
-                    "role": "system",
-                    "type": "fact",
-                }).execute()
+        # Vérifier si déjà existant
+        existing = supabase.table("memories") \
+            .select("message") \
+            .eq("user_id", user_id) \
+            .eq("type", "fact") \
+            .ilike("message", f"%{extracted_fact['value']}%") \
+            .execute()
 
-                print("FACT MEMORY OK")
-            except Exception as e:
-                print("ERREUR FACT MEMORY:", e)
+        if not existing.data:
+            supabase.table("memories").insert({
+                "user_id": user_id,
+                "message": fact_message,
+                "emotion": "neutre",
+                "role": "system",
+                "type": "fact"
+            }).execute()
+
+            print("FACT MEMORY OK")
+        else:
+            print("FACT DEJA EXISTANT")
+
+    except Exception as e:
+        print("ERREUR FACT MEMORY:", e)
 
         # 5) Lecture user_profile
         user_name = None
