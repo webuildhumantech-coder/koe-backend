@@ -37,10 +37,27 @@ Quand une information fiable sur l’utilisateur est connue, tu peux t’en serv
 # ========================
 
 def extract_name(message: str):
-    cleaned = message.replace("\\'", "'").replace("\\", "")
-    match = re.search(r"je m['’]appelle\s+([A-Za-zÀ-ÿ\-]+)", cleaned, re.IGNORECASE)
-    if match:
-        return match.group(1).strip().capitalize()
+    def extract_fact(message: str):
+     cleaned = message.replace("\\'", "'").replace("\\", "").strip()
+
+    patterns = [
+        (r"mon objectif est de\s+(.+)", "objectif"),
+        (r"je veux\s+(.+)", "objectif"),
+        (r"je préfère\s+(.+)", "preference"),
+        (r"j'aime\s+(.+)", "preference"),
+    ]
+
+    lowered = cleaned.lower()
+
+    for pattern, fact_type in patterns:
+        match = re.search(pattern, lowered, re.IGNORECASE)
+        if match:
+            value = match.group(1).strip()
+            return {
+                "fact_type": fact_type,
+                "value": value
+            }
+
     return None
 
 
@@ -68,6 +85,7 @@ async def chat(data: dict):
         # 1) Détecter un prénom éventuel
         extracted_name = extract_name(message)
         print("EXTRACTED NAME:", extracted_name)
+        print("EXTRACTED FACT:", extracted_fact)
 
         # 2) Sauvegarder le prénom dans user_profile + en fact
         if extracted_name and extracted_name.lower() not in ["none", "null", ""]:
@@ -238,3 +256,19 @@ async def chat(data: dict):
     except Exception as e:
         print("ERREUR BACKEND GLOBALE:", e)
         return {"answer": f"Erreur backend : {str(e)}"}
+    if extracted_fact and extracted_fact.get("value"):
+    try:
+        fact_message = f"{extracted_fact['fact_type']}:{extracted_fact['value']}"
+
+        supabase.table("memories").insert({
+            "user_id": user_id,
+            "message": fact_message,
+            "emotion": "neutre",
+            "role": "system",
+            "type": "fact"
+        }).execute()
+
+        print("FACT MEMORY OK")
+
+    except Exception as e:
+        print("ERREUR FACT MEMORY:", e)
