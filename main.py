@@ -204,12 +204,12 @@ def build_proactive_message(user_id: str, facts: dict):
         return None
 
     if objectif:
-        return f"{user_name}, tu voulais avancer sur {objectif}. Où en es-tu aujourd'hui ?"
+        return f"{user_name}, tu voulais finir KOÉ. Où en es-tu aujourd'hui ?"
 
     if preference:
-        return f"{user_name}, je me souviens que tu préfères {preference}. On profite de ce moment pour reprendre ?"
+        return f"{user_name}, je me souviens que tu préfères {preference}. On reprend ?"
 
-    return f"{user_name}, je viens prendre de tes nouvelles. Souhaites-tu reprendre notre échange ?"
+    return f"{user_name}, je viens prendre de tes nouvelles. On reprend notre échange ?"
 
     if has_pending_proactive_message(user_id):
         print("PROACTIVE déjà pending")
