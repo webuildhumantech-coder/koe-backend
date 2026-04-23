@@ -31,6 +31,7 @@ Tu es KOÉ, une intelligence calme, élégante et humaine.
 Tu réponds avec simplicité, clarté et profondeur.
 Tu engages la conversation naturellement.
 Quand une information fiable sur l’utilisateur est connue, tu peux t’en servir.
+Tu peux aussi relancer l’utilisateur avec douceur sur ses objectifs ou ses préférences si cela est pertinent.
 """
 
 # ========================
@@ -86,22 +87,14 @@ def build_fact_message(extracted_fact: dict) -> str:
 
 
 def get_user_facts(user_id: str) -> dict:
-    """
-    Retourne un dict simple des facts utiles.
-    Exemple :
-    {
-        "objectif": "finir KOÉ",
-        "preference": "parler le matin"
-    }
-    """
     facts = {}
 
     try:
         result = (
             supabase.table("memories")
-            .select("message")
+            .select("message, type")
             .eq("user_id", user_id)
-            .eq("type", "fact")
+            .in_("type", ["name", "objectif", "preference"])
             .order("created_at", desc=False)
             .execute()
         )
@@ -109,34 +102,67 @@ def get_user_facts(user_id: str) -> dict:
         rows = result.data or []
 
         for row in rows:
-            message = row.get("message", "")
+            t = row.get("type")
+            v = row.get("message")
 
-            # Prénom
-            if message.startswith("Le prénom de l'utilisateur est "):
-                name = message.replace("Le prénom de l'utilisateur est ", "").replace(".", "").strip()
-                if name:
-                    facts["name"] = name
+            if t == "name" and v:
+                facts["name"] = v
 
-            # Objectif
-            elif message.startswith("L'objectif actuel de l'utilisateur est de "):
-                objectif = (
-                    message.replace("L'objectif actuel de l'utilisateur est de ", "")
-                    .replace(".", "")
-                    .strip()
-                )
-                if objectif:
-                    facts["objectif"] = objectif
+            elif t == "objectif" and v:
+                facts["objectif"] = v
 
-            # Préférence
-            elif message.startswith("L'utilisateur préfère "):
-                preference = message.replace("L'utilisateur préfère ", "").replace(".", "").strip()
-                if preference:
-                    facts["preference"] = preference
+            elif t == "preference" and v:
+                facts["preference"] = v
 
     except Exception as e:
         print("ERREUR get_user_facts:", e)
 
     return facts
+
+
+def build_proactive_hint(message: str, facts: dict) -> str:
+    """
+    Petite couche proactive.
+    Elle ne remplace pas la réponse principale, elle donne une direction.
+    """
+    normalized = normalize_text(message).lower()
+
+    small_talk_inputs = [
+        "salut",
+        "bonjour",
+        "yo",
+        "ça va",
+        "ca va",
+        "hello",
+        "coucou",
+    ]
+
+    if normalized in small_talk_inputs:
+        if facts.get("objectif"):
+            return f"Tu peux relancer naturellement l'utilisateur sur son objectif actuel, qui est de {facts['objectif']}."
+        if facts.get("preference"):
+            return f"L'utilisateur préfère {facts['preference']}. Tu peux t'appuyer dessus naturellement dans ta réponse."
+        return ""
+
+    # si préférence matin et échange matinal mentionné
+    if "matin" in normalized and facts.get("preference"):
+        return f"L'utilisateur préfère {facts['preference']}. Intègre cette préférence avec naturel."
+
+    # si objectif existe et message vague
+    vague_inputs = [
+        "ok",
+        "oui",
+        "non",
+        "d'accord",
+        "ça marche",
+        "vas-y",
+        "go",
+    ]
+
+    if normalized in vague_inputs and facts.get("objectif"):
+        return f"Tu peux relancer l'utilisateur sur son objectif actuel : {facts['objectif']}."
+
+    return ""
 
 
 # ========================
@@ -176,24 +202,22 @@ async def chat(data: dict):
                     "name": extracted_name,
                 }).execute()
 
-                fact_name_message = f"Le prénom de l'utilisateur est {extracted_name}."
-
                 existing_name_fact = (
                     supabase.table("memories")
                     .select("message")
                     .eq("user_id", user_id)
-                    .eq("type", "fact")
-                    .eq("message", fact_name_message)
+                    .eq("type", "name")
+                    .eq("message", extracted_name)
                     .execute()
                 )
 
                 if not existing_name_fact.data:
                     supabase.table("memories").insert({
                         "user_id": user_id,
-                        "message": fact_name_message,
+                        "message": extracted_name,
                         "emotion": "neutre",
                         "role": "system",
-                        "type": "fact",
+                        "type": "name",
                     }).execute()
 
                 print("USER PROFILE + NAME FACT OK")
@@ -204,24 +228,25 @@ async def chat(data: dict):
         # 4) Sauvegarde autres facts avec anti-doublon
         if extracted_fact and extracted_fact.get("value"):
             try:
-                fact_message = build_fact_message(extracted_fact)
+                fact_type = extracted_fact["fact_type"]
+                fact_value = extracted_fact["value"]
 
                 existing_fact = (
                     supabase.table("memories")
                     .select("message")
                     .eq("user_id", user_id)
-                    .eq("type", "fact")
-                    .eq("message", fact_message)
+                    .eq("type", fact_type)
+                    .eq("message", fact_value)
                     .execute()
                 )
 
                 if not existing_fact.data:
                     supabase.table("memories").insert({
                         "user_id": user_id,
-                        "message": fact_message,
+                        "message": fact_value,
                         "emotion": "neutre",
                         "role": "system",
-                        "type": "fact",
+                        "type": fact_type,
                     }).execute()
                     print("FACT MEMORY OK")
                 else:
@@ -265,14 +290,13 @@ async def chat(data: dict):
         except Exception as e:
             print("ERREUR INSERT USER MEMORY:", e)
 
-        # 7) Facts structurés pour réponses directes
+        # 7) Facts structurés
         facts = get_user_facts(user_id)
         print("FACTS STRUCTURES:", facts)
 
         # 8) Réponses directes ciblées
         normalized_message = normalize_text(message).lower()
 
-        # Prénom
         if (
             "comment je m'appelle" in normalized_message
             or "quel est mon prénom" in normalized_message
@@ -297,7 +321,6 @@ async def chat(data: dict):
 
             return {"answer": answer}
 
-        # Objectif
         if "quel est mon objectif" in normalized_message:
             if facts.get("objectif"):
                 answer = f"Ton objectif actuel est de {facts['objectif']}."
@@ -317,7 +340,6 @@ async def chat(data: dict):
 
             return {"answer": answer}
 
-        # Préférence horaire
         if (
             "quand est-ce que je préfère parler" in normalized_message
             or "je préfère parler quand" in normalized_message
@@ -358,7 +380,7 @@ async def chat(data: dict):
             raw_memories.reverse()
 
             for mem in raw_memories:
-                if mem.get("type") == "fact":
+                if mem.get("type") in ["name", "objectif", "preference"]:
                     fact_rows.append(mem)
                 else:
                     memories.append(mem)
@@ -369,7 +391,10 @@ async def chat(data: dict):
         except Exception as e:
             print("ERREUR LECTURE MEMORIES:", e)
 
-        # 10) Construction du contexte
+        # 10) Contexte proactif
+        proactive_hint = build_proactive_hint(message, facts)
+        print("PROACTIVE HINT:", proactive_hint)
+
         conversation_context = [
             {"role": "system", "content": SYSTEM_PROMPT}
         ]
@@ -381,12 +406,28 @@ async def chat(data: dict):
             })
 
         for fact in fact_rows[-8:]:
-            content = fact.get("message")
-            if content:
-                conversation_context.append({
-                    "role": "system",
-                    "content": content,
-                })
+            t = fact.get("type")
+            v = fact.get("message")
+
+            if t == "name" and v:
+                content = f"L'utilisateur s'appelle {v}."
+            elif t == "objectif" and v:
+                content = f"L'objectif actuel de l'utilisateur est de {v}."
+            elif t == "preference" and v:
+                content = f"L'utilisateur préfère {v}."
+            else:
+                continue
+
+            conversation_context.append({
+                "role": "system",
+                "content": content,
+            })
+
+        if proactive_hint:
+            conversation_context.append({
+                "role": "system",
+                "content": proactive_hint,
+            })
 
         for mem in memories[-8:]:
             role = mem.get("role")
