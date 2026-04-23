@@ -45,7 +45,7 @@ def extract_name(message: str):
         (r"je veux\s+(.+)", "objectif"),
         (r"je préfère\s+(.+)", "preference"),
         (r"j'aime\s+(.+)", "preference"),
-
+    ]
 
     lowered = cleaned.lower()
 
@@ -259,7 +259,7 @@ async def chat(data: dict):
         return {"answer": f"Erreur backend : {str(e)}"}
     # FACT MEMORY
     # FACT MEMORY
-if extracted_fact and extracted_fact.get("value"):
+    if extracted_fact and extracted_fact.get("value"):
     try:
         fact_message = f"{extracted_fact['fact_type']}:{extracted_fact['value']}"
 
