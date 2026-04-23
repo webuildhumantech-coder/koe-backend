@@ -11,7 +11,7 @@ from openai import OpenAI
 # ========================
 
 SUPABASE_URL = "https://zxuysoqknkzjmpftqupl.supabase.co"
-SUPABASE_KEY = "sb_publishable_rrh5vevB5bc5E1xauwOaPw_EyG3xSW8"
+SUPABASE_KEY = "REMPLACE_ICI_PAR_TA_VRAIE_CLE_PUBLISHABLE_SUPABASE"
 
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY") or "")
@@ -37,8 +37,12 @@ Quand une information fiable sur l’utilisateur est connue, tu peux t’en serv
 # OUTILS
 # ========================
 
+def normalize_text(text: str) -> str:
+    return text.replace("\\'", "'").replace("\\", "").strip()
+
+
 def extract_name(message: str):
-    cleaned = message.replace("\\'", "'").replace("\\", "")
+    cleaned = normalize_text(message)
     match = re.search(r"je m['’]appelle\s+([A-Za-zÀ-ÿ\-]+)", cleaned, re.IGNORECASE)
     if match:
         return match.group(1).strip().capitalize()
@@ -46,7 +50,7 @@ def extract_name(message: str):
 
 
 def extract_fact(message: str):
-    cleaned = message.replace("\\'", "'").replace("\\", "").strip()
+    cleaned = normalize_text(message)
     lowered = cleaned.lower()
 
     patterns = [
@@ -67,6 +71,18 @@ def extract_fact(message: str):
                 }
 
     return None
+
+
+def build_fact_message(extracted_fact: dict) -> str:
+    fact_type = extracted_fact.get("fact_type")
+    value = extracted_fact.get("value", "").strip()
+
+    if fact_type == "objectif":
+        return f"L'objectif actuel de l'utilisateur est de {value}."
+    if fact_type == "preference":
+        return f"L'utilisateur préfère {value}."
+
+    return value
 
 
 # ========================
@@ -98,7 +114,7 @@ async def chat(data: dict):
         extracted_fact = extract_fact(message)
         print("EXTRACTED FACT:", extracted_fact)
 
-        # 3) Sauvegarde prénom dans user_profile + memories
+        # 3) Sauvegarde prénom dans user_profile + fact
         if extracted_name and extracted_name.lower() not in ["none", "null", ""]:
             try:
                 supabase.table("user_profile").upsert({
@@ -106,52 +122,59 @@ async def chat(data: dict):
                     "name": extracted_name,
                 }).execute()
 
-                supabase.table("memories").insert({
-                    "user_id": user_id,
-                    "message": f"Le prénom de l'utilisateur est {extracted_name}",
-                    "emotion": "neutre",
-                    "role": "system",
-                    "type": "fact",
-                }).execute()
+                fact_name_message = f"Le prénom de l'utilisateur est {extracted_name}."
+
+                existing_name_fact = (
+                    supabase.table("memories")
+                    .select("message")
+                    .eq("user_id", user_id)
+                    .eq("type", "fact")
+                    .eq("message", fact_name_message)
+                    .execute()
+                )
+
+                if not existing_name_fact.data:
+                    supabase.table("memories").insert({
+                        "user_id": user_id,
+                        "message": fact_name_message,
+                        "emotion": "neutre",
+                        "role": "system",
+                        "type": "fact",
+                    }).execute()
 
                 print("USER PROFILE + NAME FACT OK")
+
             except Exception as e:
                 print("ERREUR USER PROFILE / NAME FACT:", e)
 
-        # 4) Sauvegarde autres faits
+        # 4) Sauvegarde autres faits avec anti-doublon
         if extracted_fact and extracted_fact.get("value"):
-    try:
-        # Construction phrase
-        if extracted_fact["fact_type"] == "objectif":
-            fact_message = f"L'objectif actuel de l'utilisateur est de {extracted_fact['value']}."
-        elif extracted_fact["fact_type"] == "preference":
-            fact_message = f"L'utilisateur préfère {extracted_fact['value']}."
-        else:
-            fact_message = extracted_fact["value"]
+            try:
+                fact_message = build_fact_message(extracted_fact)
 
-        # Vérifier si déjà existant
-        existing = supabase.table("memories") \
-            .select("message") \
-            .eq("user_id", user_id) \
-            .eq("type", "fact") \
-            .ilike("message", f"%{extracted_fact['value']}%") \
-            .execute()
+                existing_fact = (
+                    supabase.table("memories")
+                    .select("message")
+                    .eq("user_id", user_id)
+                    .eq("type", "fact")
+                    .eq("message", fact_message)
+                    .execute()
+                )
 
-        if not existing.data:
-            supabase.table("memories").insert({
-                "user_id": user_id,
-                "message": fact_message,
-                "emotion": "neutre",
-                "role": "system",
-                "type": "fact"
-            }).execute()
+                if not existing_fact.data:
+                    supabase.table("memories").insert({
+                        "user_id": user_id,
+                        "message": fact_message,
+                        "emotion": "neutre",
+                        "role": "system",
+                        "type": "fact",
+                    }).execute()
+                    print("FACT MEMORY OK")
+                else:
+                    print("FACT DEJA EXISTANT")
 
-            print("FACT MEMORY OK")
-        else:
-            print("FACT DEJA EXISTANT")
-
-    except Exception as e:
-        print("ERREUR FACT MEMORY:", e)
+            except Exception as e:
+                print("ERREUR FACT MEMORY:", e)
 
         # 5) Lecture user_profile
         user_name = None
@@ -167,6 +190,7 @@ async def chat(data: dict):
 
             if profile.data and len(profile.data) > 0:
                 user_name = profile.data[0].get("name")
+
         except Exception as e:
             print("ERREUR LECTURE USER_PROFILE:", e)
 
@@ -183,11 +207,12 @@ async def chat(data: dict):
             }).execute()
 
             print("INSERT USER MEMORY OK")
+
         except Exception as e:
             print("ERREUR INSERT USER MEMORY:", e)
 
         # 7) Réponse directe si question sur le prénom
-        normalized_message = message.replace("\\'", "'").replace("\\", "").lower()
+        normalized_message = normalize_text(message).lower()
 
         if (
             "comment je m'appelle" in normalized_message
@@ -208,6 +233,7 @@ async def chat(data: dict):
                 }).execute()
 
                 print("INSERT ASSISTANT DIRECT OK")
+
             except Exception as e:
                 print("ERREUR INSERT ASSISTANT DIRECT:", e)
 
@@ -223,7 +249,7 @@ async def chat(data: dict):
                 .select("role, message, type")
                 .eq("user_id", user_id)
                 .order("created_at", desc=True)
-                .limit(20)
+                .limit(30)
                 .execute()
             )
 
@@ -238,6 +264,7 @@ async def chat(data: dict):
 
             print("MEMORIES COUNT:", len(memories))
             print("FACTS COUNT:", len(facts))
+
         except Exception as e:
             print("ERREUR LECTURE MEMORIES:", e)
 
@@ -252,7 +279,7 @@ async def chat(data: dict):
                 "content": f"L'utilisateur s'appelle {user_name}.",
             })
 
-        for fact in facts[-5:]:
+        for fact in facts[-8:]:
             content = fact.get("message")
             if content:
                 conversation_context.append({
@@ -295,6 +322,7 @@ async def chat(data: dict):
             }).execute()
 
             print("INSERT ASSISTANT MEMORY OK")
+
         except Exception as e:
             print("ERREUR INSERT ASSISTANT MEMORY:", e)
 
