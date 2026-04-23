@@ -45,7 +45,7 @@ def extract_name(message: str):
         (r"je veux\s+(.+)", "objectif"),
         (r"je préfère\s+(.+)", "preference"),
         (r"j'aime\s+(.+)", "preference"),
-    ]
+
 
     lowered = cleaned.lower()
 
@@ -85,6 +85,7 @@ async def chat(data: dict):
         # 1) Détecter un prénom éventuel
         extracted_name = extract_name(message)
         print("EXTRACTED NAME:", extracted_name)
+        extracted_fact = extract_fact(message)
         print("EXTRACTED FACT:", extracted_fact)
 
         # 2) Sauvegarder le prénom dans user_profile + en fact
@@ -256,7 +257,9 @@ async def chat(data: dict):
     except Exception as e:
         print("ERREUR BACKEND GLOBALE:", e)
         return {"answer": f"Erreur backend : {str(e)}"}
-    if extracted_fact and extracted_fact.get("value"):
+    # FACT MEMORY
+    # FACT MEMORY
+if extracted_fact and extracted_fact.get("value"):
     try:
         fact_message = f"{extracted_fact['fact_type']}:{extracted_fact['value']}"
 
