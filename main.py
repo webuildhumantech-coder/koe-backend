@@ -195,16 +195,21 @@ def has_pending_proactive_message(user_id: str) -> bool:
 
 
 def build_proactive_message(user_id: str, facts: dict):
-    """
-    Version A du niveau 4 :
-    - génère un message autonome
-    - le stocke en base
-    - ton app pourra ensuite l'afficher
-    """
-
     user_name = facts.get("name", "toi")
     objectif = facts.get("objectif")
     preference = facts.get("preference")
+
+    if has_pending_proactive_message(user_id):
+        print("PROACTIVE déjà pending")
+        return None
+
+    if objectif:
+        return f"{user_name}, tu voulais avancer sur {objectif}. Où en es-tu aujourd'hui ?}
+
+    if preference:
+        return f"{user_name}, je me souviens que tu préfères {preference}. On profite de ce moment pour reprendre ?"
+
+    return f"{user_name}, je viens prendre de tes nouvelles. Souhaites-tu reprendre notre échange ?"
 
     if has_pending_proactive_message(user_id):
         print("PROACTIVE déjà pending")
