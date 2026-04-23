@@ -217,7 +217,23 @@ async def chat(data: dict):
         if (
             "comment je m'appelle" in normalized_message
             or "quel est mon prénom" in normalized_message
-        ):
+
+            facts = get_user_facts(user_id)
+
+# 🎯 Objectif utilisateur
+if "quel est mon objectif" in normalized_message:
+    if "objectif" in facts:
+        return {"answer": f"Ton objectif est : {facts['objectif']}."}
+    else:
+        return {"answer": "Je ne connais pas encore ton objectif."}
+
+# 🕒 Préférence de moment
+if "quand est-ce que je préfère parler" in normalized_message or "je préfère parler quand" in normalized_message:
+    if "preference" in facts:
+        return {"answer": f"Tu préfères parler {facts['preference']}."}
+    else:
+        return {"answer": "Je ne connais pas encore ta préférence."}
+        
             if user_name:
                 answer = f"Tu t'appelles {user_name}."
             else:
@@ -310,7 +326,26 @@ async def chat(data: dict):
         )
 
         answer = response.output_text.strip()
+def get_user_facts(user_id):
+    try:
+        result = supabase.table("memories") \
+            .select("message") \
+            .eq("user_id", user_id) \
+            .eq("type", "fact") \
+            .execute()
 
+        facts = {}
+        for row in result.data:
+            if ":" in row["message"]:
+                key, value = row["message"].split(":", 1)
+                facts[key] = value
+
+        return facts
+
+    except Exception as e:
+        print("ERREUR LECTURE FACTS:", e)
+        return {}
+    
         # 11) Sauvegarde réponse assistant
         try:
             supabase.table("memories").insert({
