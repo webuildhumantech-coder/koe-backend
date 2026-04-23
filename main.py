@@ -85,6 +85,60 @@ def build_fact_message(extracted_fact: dict) -> str:
     return value
 
 
+def get_user_facts(user_id: str) -> dict:
+    """
+    Retourne un dict simple des facts utiles.
+    Exemple :
+    {
+        "objectif": "finir KOÉ",
+        "preference": "parler le matin"
+    }
+    """
+    facts = {}
+
+    try:
+        result = (
+            supabase.table("memories")
+            .select("message")
+            .eq("user_id", user_id)
+            .eq("type", "fact")
+            .order("created_at", desc=False)
+            .execute()
+        )
+
+        rows = result.data or []
+
+        for row in rows:
+            message = row.get("message", "")
+
+            # Prénom
+            if message.startswith("Le prénom de l'utilisateur est "):
+                name = message.replace("Le prénom de l'utilisateur est ", "").replace(".", "").strip()
+                if name:
+                    facts["name"] = name
+
+            # Objectif
+            elif message.startswith("L'objectif actuel de l'utilisateur est de "):
+                objectif = (
+                    message.replace("L'objectif actuel de l'utilisateur est de ", "")
+                    .replace(".", "")
+                    .strip()
+                )
+                if objectif:
+                    facts["objectif"] = objectif
+
+            # Préférence
+            elif message.startswith("L'utilisateur préfère "):
+                preference = message.replace("L'utilisateur préfère ", "").replace(".", "").strip()
+                if preference:
+                    facts["preference"] = preference
+
+    except Exception as e:
+        print("ERREUR get_user_facts:", e)
+
+    return facts
+
+
 # ========================
 # ROUTES
 # ========================
@@ -147,7 +201,7 @@ async def chat(data: dict):
             except Exception as e:
                 print("ERREUR USER PROFILE / NAME FACT:", e)
 
-        # 4) Sauvegarde autres faits avec anti-doublon
+        # 4) Sauvegarde autres facts avec anti-doublon
         if extracted_fact and extracted_fact.get("value"):
             try:
                 fact_message = build_fact_message(extracted_fact)
@@ -186,10 +240,10 @@ async def chat(data: dict):
                 .execute()
             )
 
-            print("PROFILE DATA:", profile.data)
-
             if profile.data and len(profile.data) > 0:
                 user_name = profile.data[0].get("name")
+
+            print("PROFILE DATA:", profile.data)
 
         except Exception as e:
             print("ERREUR LECTURE USER_PROFILE:", e)
@@ -211,31 +265,22 @@ async def chat(data: dict):
         except Exception as e:
             print("ERREUR INSERT USER MEMORY:", e)
 
-        # 7) Réponse directe si question sur le prénom
+        # 7) Facts structurés pour réponses directes
+        facts = get_user_facts(user_id)
+        print("FACTS STRUCTURES:", facts)
+
+        # 8) Réponses directes ciblées
         normalized_message = normalize_text(message).lower()
 
+        # Prénom
         if (
             "comment je m'appelle" in normalized_message
             or "quel est mon prénom" in normalized_message
-
-            facts = get_user_facts(user_id)
-
-# 🎯 Objectif utilisateur
-if "quel est mon objectif" in normalized_message:
-    if "objectif" in facts:
-        return {"answer": f"Ton objectif est : {facts['objectif']}."}
-    else:
-        return {"answer": "Je ne connais pas encore ton objectif."}
-
-# 🕒 Préférence de moment
-if "quand est-ce que je préfère parler" in normalized_message or "je préfère parler quand" in normalized_message:
-    if "preference" in facts:
-        return {"answer": f"Tu préfères parler {facts['preference']}."}
-    else:
-        return {"answer": "Je ne connais pas encore ta préférence."}
-        
+        ):
             if user_name:
                 answer = f"Tu t'appelles {user_name}."
+            elif facts.get("name"):
+                answer = f"Tu t'appelles {facts['name']}."
             else:
                 answer = "Je ne connais pas encore ton prénom."
 
@@ -247,17 +292,57 @@ if "quand est-ce que je préfère parler" in normalized_message or "je préfère
                     "role": "assistant",
                     "type": "conversation",
                 }).execute()
-
-                print("INSERT ASSISTANT DIRECT OK")
-
             except Exception as e:
-                print("ERREUR INSERT ASSISTANT DIRECT:", e)
+                print("ERREUR INSERT ASSISTANT DIRECT PRENOM:", e)
 
             return {"answer": answer}
 
-        # 8) Lecture des mémoires
+        # Objectif
+        if "quel est mon objectif" in normalized_message:
+            if facts.get("objectif"):
+                answer = f"Ton objectif actuel est de {facts['objectif']}."
+            else:
+                answer = "Je ne connais pas encore ton objectif."
+
+            try:
+                supabase.table("memories").insert({
+                    "user_id": user_id,
+                    "message": answer,
+                    "emotion": "neutre",
+                    "role": "assistant",
+                    "type": "conversation",
+                }).execute()
+            except Exception as e:
+                print("ERREUR INSERT ASSISTANT DIRECT OBJECTIF:", e)
+
+            return {"answer": answer}
+
+        # Préférence horaire
+        if (
+            "quand est-ce que je préfère parler" in normalized_message
+            or "je préfère parler quand" in normalized_message
+        ):
+            if facts.get("preference"):
+                answer = f"Tu préfères parler {facts['preference']}."
+            else:
+                answer = "Je ne connais pas encore ta préférence."
+
+            try:
+                supabase.table("memories").insert({
+                    "user_id": user_id,
+                    "message": answer,
+                    "emotion": "neutre",
+                    "role": "assistant",
+                    "type": "conversation",
+                }).execute()
+            except Exception as e:
+                print("ERREUR INSERT ASSISTANT DIRECT PREFERENCE:", e)
+
+            return {"answer": answer}
+
+        # 9) Lecture des mémoires
         memories = []
-        facts = []
+        fact_rows = []
 
         try:
             memory_result = (
@@ -274,17 +359,17 @@ if "quand est-ce que je préfère parler" in normalized_message or "je préfère
 
             for mem in raw_memories:
                 if mem.get("type") == "fact":
-                    facts.append(mem)
+                    fact_rows.append(mem)
                 else:
                     memories.append(mem)
 
             print("MEMORIES COUNT:", len(memories))
-            print("FACTS COUNT:", len(facts))
+            print("FACT ROWS COUNT:", len(fact_rows))
 
         except Exception as e:
             print("ERREUR LECTURE MEMORIES:", e)
 
-        # 9) Construction du contexte
+        # 10) Construction du contexte
         conversation_context = [
             {"role": "system", "content": SYSTEM_PROMPT}
         ]
@@ -295,7 +380,7 @@ if "quand est-ce que je préfère parler" in normalized_message or "je préfère
                 "content": f"L'utilisateur s'appelle {user_name}.",
             })
 
-        for fact in facts[-8:]:
+        for fact in fact_rows[-8:]:
             content = fact.get("message")
             if content:
                 conversation_context.append({
@@ -319,34 +404,15 @@ if "quand est-ce que je préfère parler" in normalized_message or "je préfère
 
         print("CONTEXT READY")
 
-        # 10) Appel OpenAI
+        # 11) Appel OpenAI
         response = client.responses.create(
             model="gpt-4.1-mini",
             input=conversation_context,
         )
 
         answer = response.output_text.strip()
-def get_user_facts(user_id):
-    try:
-        result = supabase.table("memories") \
-            .select("message") \
-            .eq("user_id", user_id) \
-            .eq("type", "fact") \
-            .execute()
 
-        facts = {}
-        for row in result.data:
-            if ":" in row["message"]:
-                key, value = row["message"].split(":", 1)
-                facts[key] = value
-
-        return facts
-
-    except Exception as e:
-        print("ERREUR LECTURE FACTS:", e)
-        return {}
-    
-        # 11) Sauvegarde réponse assistant
+        # 12) Sauvegarde réponse assistant
         try:
             supabase.table("memories").insert({
                 "user_id": user_id,
