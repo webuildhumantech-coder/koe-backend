@@ -1,5 +1,6 @@
 import os
 import re
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from supabase import create_client
@@ -37,8 +38,16 @@ Quand une information fiable sur l’utilisateur est connue, tu peux t’en serv
 # ========================
 
 def extract_name(message: str):
-    def extract_fact(message: str):
-     cleaned = message.replace("\\'", "'").replace("\\", "").strip()
+    cleaned = message.replace("\\'", "'").replace("\\", "")
+    match = re.search(r"je m['’]appelle\s+([A-Za-zÀ-ÿ\-]+)", cleaned, re.IGNORECASE)
+    if match:
+        return match.group(1).strip().capitalize()
+    return None
+
+
+def extract_fact(message: str):
+    cleaned = message.replace("\\'", "'").replace("\\", "").strip()
+    lowered = cleaned.lower()
 
     patterns = [
         (r"mon objectif est de\s+(.+)", "objectif"),
@@ -47,16 +56,15 @@ def extract_name(message: str):
         (r"j'aime\s+(.+)", "preference"),
     ]
 
-    lowered = cleaned.lower()
-
     for pattern, fact_type in patterns:
         match = re.search(pattern, lowered, re.IGNORECASE)
         if match:
             value = match.group(1).strip()
-            return {
-                "fact_type": fact_type,
-                "value": value
-            }
+            if value:
+                return {
+                    "fact_type": fact_type,
+                    "value": value,
+                }
 
     return None
 
@@ -82,18 +90,20 @@ async def chat(data: dict):
 
         print("MESSAGE RECU:", repr(message))
 
-        # 1) Détecter un prénom éventuel
+        # 1) Détection prénom
         extracted_name = extract_name(message)
         print("EXTRACTED NAME:", extracted_name)
+
+        # 2) Détection autres faits
         extracted_fact = extract_fact(message)
         print("EXTRACTED FACT:", extracted_fact)
 
-        # 2) Sauvegarder le prénom dans user_profile + en fact
+        # 3) Sauvegarde prénom dans user_profile + memories
         if extracted_name and extracted_name.lower() not in ["none", "null", ""]:
             try:
                 supabase.table("user_profile").upsert({
                     "user_id": user_id,
-                    "name": extracted_name
+                    "name": extracted_name,
                 }).execute()
 
                 supabase.table("memories").insert({
@@ -101,51 +111,70 @@ async def chat(data: dict):
                     "message": f"Le prénom de l'utilisateur est {extracted_name}",
                     "emotion": "neutre",
                     "role": "system",
-                    "type": "fact"
+                    "type": "fact",
                 }).execute()
 
-                print("USER PROFILE + FACT OK")
-
+                print("USER PROFILE + NAME FACT OK")
             except Exception as e:
-                print("ERREUR USER PROFILE:", e)
+                print("ERREUR USER PROFILE / NAME FACT:", e)
 
-        # 3) Lire user_profile
+        # 4) Sauvegarde autres faits
+        if extracted_fact and extracted_fact.get("value"):
+            try:
+                fact_message = f"{extracted_fact['fact_type']}:{extracted_fact['value']}"
+
+                supabase.table("memories").insert({
+                    "user_id": user_id,
+                    "message": fact_message,
+                    "emotion": "neutre",
+                    "role": "system",
+                    "type": "fact",
+                }).execute()
+
+                print("FACT MEMORY OK")
+            except Exception as e:
+                print("ERREUR FACT MEMORY:", e)
+
+        # 5) Lecture user_profile
         user_name = None
         try:
-            profile = supabase.table("user_profile") \
-                .select("user_id, name") \
-                .eq("user_id", user_id) \
+            profile = (
+                supabase.table("user_profile")
+                .select("user_id, name")
+                .eq("user_id", user_id)
                 .execute()
+            )
 
             print("PROFILE DATA:", profile.data)
 
             if profile.data and len(profile.data) > 0:
                 user_name = profile.data[0].get("name")
-
         except Exception as e:
             print("ERREUR LECTURE USER_PROFILE:", e)
 
         print("USER_NAME AVANT REPONSE:", user_name)
 
-        # 4) Sauvegarder le message user
+        # 6) Sauvegarde message user
         try:
             supabase.table("memories").insert({
                 "user_id": user_id,
                 "message": message,
                 "emotion": emotion,
                 "role": "user",
-                "type": "conversation"
+                "type": "conversation",
             }).execute()
 
             print("INSERT USER MEMORY OK")
-
         except Exception as e:
             print("ERREUR INSERT USER MEMORY:", e)
 
-        # 5) Réponse directe si on demande le prénom
+        # 7) Réponse directe si question sur le prénom
         normalized_message = message.replace("\\'", "'").replace("\\", "").lower()
 
-        if "comment je m'appelle" in normalized_message or "quel est mon prénom" in normalized_message:
+        if (
+            "comment je m'appelle" in normalized_message
+            or "quel est mon prénom" in normalized_message
+        ):
             if user_name:
                 answer = f"Tu t'appelles {user_name}."
             else:
@@ -157,27 +186,28 @@ async def chat(data: dict):
                     "message": answer,
                     "emotion": "neutre",
                     "role": "assistant",
-                    "type": "conversation"
+                    "type": "conversation",
                 }).execute()
 
                 print("INSERT ASSISTANT DIRECT OK")
-
             except Exception as e:
                 print("ERREUR INSERT ASSISTANT DIRECT:", e)
 
             return {"answer": answer}
 
-        # 6) Lire les derniers messages de mémoire
+        # 8) Lecture des mémoires
         memories = []
         facts = []
 
         try:
-            memory_result = supabase.table("memories") \
-                .select("role, message, type") \
-                .eq("user_id", user_id) \
-                .order("created_at", desc=True) \
-                .limit(12) \
+            memory_result = (
+                supabase.table("memories")
+                .select("role, message, type")
+                .eq("user_id", user_id)
+                .order("created_at", desc=True)
+                .limit(20)
                 .execute()
+            )
 
             raw_memories = memory_result.data or []
             raw_memories.reverse()
@@ -190,11 +220,10 @@ async def chat(data: dict):
 
             print("MEMORIES COUNT:", len(memories))
             print("FACTS COUNT:", len(facts))
-
         except Exception as e:
             print("ERREUR LECTURE MEMORIES:", e)
 
-        # 7) Construire le contexte
+        # 9) Construction du contexte
         conversation_context = [
             {"role": "system", "content": SYSTEM_PROMPT}
         ]
@@ -202,7 +231,7 @@ async def chat(data: dict):
         if user_name:
             conversation_context.append({
                 "role": "system",
-                "content": f"L'utilisateur s'appelle {user_name}."
+                "content": f"L'utilisateur s'appelle {user_name}.",
             })
 
         for fact in facts[-5:]:
@@ -210,7 +239,7 @@ async def chat(data: dict):
             if content:
                 conversation_context.append({
                     "role": "system",
-                    "content": content
+                    "content": content,
                 })
 
         for mem in memories[-8:]:
@@ -219,36 +248,35 @@ async def chat(data: dict):
             if role in ["user", "assistant"] and content:
                 conversation_context.append({
                     "role": role,
-                    "content": content
+                    "content": content,
                 })
 
         conversation_context.append({
             "role": "user",
-            "content": message
+            "content": message,
         })
 
         print("CONTEXT READY")
 
-        # 8) Appel OpenAI
+        # 10) Appel OpenAI
         response = client.responses.create(
             model="gpt-4.1-mini",
-            input=conversation_context
+            input=conversation_context,
         )
 
         answer = response.output_text.strip()
 
-        # 9) Sauvegarder la réponse assistant
+        # 11) Sauvegarde réponse assistant
         try:
             supabase.table("memories").insert({
                 "user_id": user_id,
                 "message": answer,
                 "emotion": "neutre",
                 "role": "assistant",
-                "type": "conversation"
+                "type": "conversation",
             }).execute()
 
             print("INSERT ASSISTANT MEMORY OK")
-
         except Exception as e:
             print("ERREUR INSERT ASSISTANT MEMORY:", e)
 
@@ -257,21 +285,3 @@ async def chat(data: dict):
     except Exception as e:
         print("ERREUR BACKEND GLOBALE:", e)
         return {"answer": f"Erreur backend : {str(e)}"}
-    # FACT MEMORY
-    # FACT MEMORY
-    if extracted_fact and extracted_fact.get("value"):
-    try:
-        fact_message = f"{extracted_fact['fact_type']}:{extracted_fact['value']}"
-
-        supabase.table("memories").insert({
-            "user_id": user_id,
-            "message": fact_message,
-            "emotion": "neutre",
-            "role": "system",
-            "type": "fact"
-        }).execute()
-
-        print("FACT MEMORY OK")
-
-    except Exception as e:
-        print("ERREUR FACT MEMORY:", e)
