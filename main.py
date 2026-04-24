@@ -7,6 +7,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from supabase import create_client
 from openai import OpenAI
 
+client = OpenAI()
+
 # ========================
 # CONFIG
 # ========================
@@ -15,7 +17,7 @@ SUPABASE_URL = "https://zxuysoqknkzjmpftqupl.supabase.co"
 SUPABASE_KEY = "sb_publishable_rrh5vevB5bc5E1xauwOaPw_EyG3xSW8"
 
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY") or "")
+client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 app = FastAPI()
 
@@ -379,13 +381,35 @@ def run_proactive_check():
             "ok": False,
             "error": str(e)
         }
+from fastapi.responses import StreamingResponse
+import io
+
 @app.post("/tts")
 def tts(data: dict):
-      text = data.get("text", "")
-      return {
-        "ok": True,
-        "text": text
-    }
+    text = data.get("text", "")
+
+    if not text:
+        return {"ok": False, "error": "No text provided"}
+
+    try:
+        response = client.audio.speech.create(
+            model="gpt-4o-mini-tts",
+            voice="alloy",
+            input=text
+        )
+
+        audio_bytes = response.read()
+
+        return StreamingResponse(
+            io.BytesIO(audio_bytes),
+            media_type="audio/mpeg"
+        )
+
+    except Exception as e:
+        return {
+            "ok": False,
+            "error": str(e)
+        }
 
 @app.post("/chat")
 async def chat(data: dict):
