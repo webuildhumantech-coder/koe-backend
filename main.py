@@ -325,21 +325,20 @@ def mark_proactive_shown(data: dict):
 
 
 @app.post("/run-proactive-check")
-def run_proactive_check(data: dict = None):
-    """
-    Endpoint à appeler manuellement ou via un scheduler.
-    Il vérifie si KOÉ doit générer un message autonome.
-    """
-    user_id = "default"
-    if data and data.get("user_id"):
-        user_id = data["user_id"]
+def run_proactive_check():
+    message = "TEST KOÉ PROACTIF"
 
-    created = create_proactive_message_if_needed(user_id)
+    # INSERT MANUEL
+    supabase.table("proactive_messages").insert({
+        "user_id": "default",
+        "message": message,
+        "shown": False
+    }).execute()
 
     return {
         "ok": True,
-        "created": bool(created),
-        "data": created,
+        "created": True,
+        "data": message
     }
 
 
