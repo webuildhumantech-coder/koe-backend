@@ -274,21 +274,26 @@ def root():
 
 
 @app.get("/proactive-message")
-def get_pending_proactive_message(user_id: str = "default"):
-    """
-    L'app peut appeler cette route à l'ouverture.
-    Si un message pending existe, on le renvoie.
-    """
+def get_proactive_message(user_id: str = "default"):
     try:
-        result = (
-            supabase.table("proactive_messages")
-            .select("*")
-            .eq("user_id", user_id)
-            .eq("status", "pending")
-            .order("created_at", desc=False)
-            .limit(1)
+        result = supabase.table("proactive_messages") \
+            .select("*") \
+            .eq("user_id", user_id) \
+            .eq("shown", False) \
+            .order("created_at", desc=False) \
+            .limit(1) \
             .execute()
-        )
+
+        return {
+            "ok": True,
+            "data": result.data[0] if result.data else None
+        }
+
+    except Exception as e:
+        return {
+            "ok": False,
+            "error": str(e)
+        }
 
         rows = result.data or []
         if not rows:
@@ -304,31 +309,33 @@ def get_pending_proactive_message(user_id: str = "default"):
 
 @app.post("/mark-proactive-shown")
 def mark_proactive_shown(data: dict):
-    """
-    Quand ton front a affiché le message, il peut appeler cette route
-    pour passer le status de pending à shown.
-    """
     try:
-        proactive_id = data.get("id")
-        if not proactive_id:
-            return {"ok": False, "error": "Missing id"}
+        message_id = data.get("id")
 
-        supabase.table("proactive_messages").update({
-            "status": "shown",
-            "sent_at": now_utc_iso(),
-        }).eq("id", proactive_id).execute()
+        if not message_id:
+            return {"ok": False, "error": "Missing message id"}
 
-        return {"ok": True}
+        result = supabase.table("proactive_messages") \
+            .update({"shown": True}) \
+            .eq("id", message_id) \
+            .execute()
+
+        return {
+            "ok": True,
+            "data": result.data
+        }
 
     except Exception as e:
-        print("ERREUR /mark-proactive-shown:", e)
-        return {"ok": False, "error": str(e)}
+        return {
+            "ok": False,
+            "error": str(e)
+        }
 
 
 @app.post("/run-proactive-check")
 def run_proactive_check():
     try:
-        message = generate_proactive_message("default")
+        message = build_proactive_message("default", {})
 
         if not message:
             return {
