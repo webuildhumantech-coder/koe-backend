@@ -7,6 +7,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from supabase import create_client
 from openai import OpenAI
 from fastapi.responses import Response
+from fastapi.responses import FileResponse
+import tempfile
+
 
 # ========================
 # CONFIG
@@ -427,7 +430,45 @@ def tts(data: dict):
             "ok": False,
             "error": str(e)
         }
+@app.post("/chat-voice")
+async def chat_voice(data: dict):
+    try:
+        chat_result = await chat(data)
 
+        answer = chat_result.get("answer") or chat_result.get("data") or ""
+
+        if not answer:
+            return {
+                "ok": False,
+                "error": "No answer generated"
+            }
+
+        tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".mp3")
+        tmp_path = tmp.name
+        tmp.close()
+
+        with client.audio.speech.with_streaming_response.create(
+            model="gpt-4o-mini-tts",
+            voice="alloy",
+            input=answer,
+            response_format="mp3"
+        ) as response:
+            response.stream_to_file(tmp_path)
+
+        print("CHAT VOICE FILE SIZE:", os.path.getsize(tmp_path))
+
+        return FileResponse(
+            tmp_path,
+            media_type="audio/mpeg",
+            filename="koe-chat.mp3"
+        )
+
+    except Exception as e:
+        return {
+            "ok": False,
+            "error": str(e)
+        }
+    
 @app.post("/chat")
 async def chat(data: dict):
     try:
