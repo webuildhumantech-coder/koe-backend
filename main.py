@@ -390,6 +390,10 @@ import os
 
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
+from fastapi.responses import FileResponse
+import tempfile
+import os
+
 @app.post("/tts")
 def tts(data: dict):
     text = data.get("text", "")
@@ -398,22 +402,24 @@ def tts(data: dict):
         return {"ok": False, "error": "No text provided"}
 
     try:
+        tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".mp3")
+        tmp_path = tmp.name
+        tmp.close()
+
         with client.audio.speech.with_streaming_response.create(
             model="gpt-4o-mini-tts",
             voice="alloy",
             input=text,
             response_format="mp3"
         ) as response:
-            audio_bytes = b"".join(response.iter_bytes())
+            response.stream_to_file(tmp_path)
 
-        print("AUDIO BYTES:", len(audio_bytes))
+        print("TTS FILE SIZE:", os.path.getsize(tmp_path))
 
-        return Response(
-            content=audio_bytes,
+        return FileResponse(
+            tmp_path,
             media_type="audio/mpeg",
-            headers={
-                "Content-Disposition": "inline; filename=koe.mp3"
-            }
+            filename="koe.mp3"
         )
 
     except Exception as e:
