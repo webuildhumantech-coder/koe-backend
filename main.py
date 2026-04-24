@@ -355,9 +355,11 @@ async def chat(data: dict):
         user_id = "default"
         emotion = "neutre"
 
-        if not message:
-            return {"answer": "No message"}
-
+        if not message: return {
+        "ok": True,
+        "created": False,
+        "data": None
+    }
         print("MESSAGE RECU:", repr(message))
 
         # 1) Détection prénom
