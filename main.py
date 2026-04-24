@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from supabase import create_client
 from openai import OpenAI
 from fastapi.responses import Response
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse,Response
 import tempfile
 
 # ========================
@@ -433,26 +433,78 @@ async def chat(data: dict):
         if not message:
             return {
                 "ok": True,
-                "created": False,
-                "data": None
+                "answer": "",
+                "error": "No message provided"
             }
 
-            response = client.responses.create(
+        response = client.responses.create(
             model="gpt-4.1-mini",
             input=f"""
 {SYSTEM_PROMPT}
 
 Utilisateur : {message}
 """
-)
-            answer = response.output_text.strip()
+        )
 
-            return {"answer": answer}
+        answer = response.output_text.strip()
+
+        return {
+            "ok": True,
+            "answer": answer
+        }
+
+    except Exception as e:
+        return {
+            "ok": False,
+            "answer": "",
+            "error": str(e)
+        }
+
+
+@app.post("/chat-voice")
+async def chat_voice(data: dict):
+    try:
+        chat_result = await chat(data)
+
+        if not chat_result or not chat_result.get("ok"):
+            return {
+                "ok": False,
+                "error": chat_result.get("error") if chat_result else "Chat returned nothing"
+            }
+
+        answer = chat_result.get("answer", "").strip()
+
+        if not answer:
+            return {
+                "ok": False,
+                "error": "No answer generated"
+            }
+
+        tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".mp3")
+        tmp_path = tmp.name
+        tmp.close()
+
+        with client.audio.speech.with_streaming_response.create(
+            model="gpt-4o-mini-tts",
+            voice="alloy",
+            input=answer,
+            response_format="mp3"
+        ) as response:
+            response.stream_to_file(tmp_path)
+
+        print("CHAT VOICE FILE SIZE:", os.path.getsize(tmp_path))
+
+        return FileResponse(
+            tmp_path,
+            media_type="audio/mpeg",
+            filename="koe-chat.mp3"
+        )
 
     except Exception as e:
         return {
             "ok": False,
             "error": str(e)
+        
         }
     
 @app.post("/chat-voice")
