@@ -326,21 +326,26 @@ def mark_proactive_shown(data: dict):
 
 @app.post("/run-proactive-check")
 def run_proactive_check():
-    message = "TEST KOÉ PROACTIF"
+    try:
+        message = "TEST KOÉ PROACTIF"
 
-    # INSERT MANUEL
-    supabase.table("proactive_messages").insert({
-        "user_id": "default",
-        "message": message,
-        "shown": False
-    }).execute()
+        result = supabase.table("proactive_messages").insert({
+            "user_id": "default",
+            "message": message,
+            "shown": False
+        }).execute()
 
-    return {
-        "ok": True,
-        "created": True,
-        "data": message
-    }
+        return {
+            "ok": True,
+            "created": True,
+            "data": result.data
+        }
 
+    except Exception as e:
+        return {
+            "ok": False,
+            "error": str(e)
+        }
 
 @app.post("/chat")
 async def chat(data: dict):
