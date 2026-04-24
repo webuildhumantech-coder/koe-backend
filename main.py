@@ -218,11 +218,12 @@ def build_proactive_message(user_id: str, facts: dict):
     latest_user_dt = get_latest_user_message_time(user_id)
     now_dt = datetime.now(timezone.utc)
 
-    hours_since_last_user_msg = None
-    if latest_user_dt:
-        delta = now_dt - latest_user_dt
-        hours_since_last_user_msg = delta.total_seconds() / 3600
-
+    if hours_since_last_user_msg is not None:
+     if hours_since_last_user_msg > 24:
+        return f"{user_name}, ça fait longtemps. Tu veux qu’on reprenne doucement ?"
+    elif hours_since_last_user_msg > 6:
+        return f"{user_name}, ça fait un moment. Tu veux reprendre ?"
+    
     # Règles simples de départ
     # 1) si objectif connu et plus de 12h sans message user
     if objectif:
