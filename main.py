@@ -6,6 +6,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from supabase import create_client
 from openai import OpenAI
+from fastapi.responses import Response
 
 client = OpenAI()
 
@@ -399,22 +400,28 @@ def tts(data: dict):
         return {"ok": False, "error": "No text provided"}
 
     try:
-        def audio_stream():
-            with client.audio.speech.with_streaming_response.create(
-                model="gpt-4o-mini-tts",
-                voice="alloy",
-                input=text
-            ) as response:
-                for chunk in response.iter_bytes():
-                    yield chunk
+        with client.audio.speech.with_streaming_response.create(
+            model="gpt-4o-mini-tts",
+            voice="alloy",
+            input=text,
+            response_format="mp3"
+        ) as response:
+            audio_bytes = b"".join(response.iter_bytes())
 
-        return StreamingResponse(audio_stream(), media_type="audio/mpeg")
+        print("AUDIO BYTES:", len(audio_bytes))
+
+        return Response(
+            content=audio_bytes,
+            media_type="audio/mpeg",
+            headers={
+                "Content-Disposition": "inline; filename=koe.mp3"
+            }
+        )
 
     except Exception as e:
         return {
             "ok": False,
             "error": str(e)
-        
         }
 
 @app.post("/chat")
