@@ -8,8 +8,6 @@ from supabase import create_client
 from openai import OpenAI
 from fastapi.responses import Response
 
-client = OpenAI()
-
 # ========================
 # CONFIG
 # ========================
