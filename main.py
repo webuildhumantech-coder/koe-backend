@@ -384,6 +384,13 @@ def run_proactive_check():
 from fastapi.responses import StreamingResponse
 import io
 
+from fastapi.responses import StreamingResponse
+from openai import OpenAI
+import io
+import os
+
+client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+
 @app.post("/tts")
 def tts(data: dict):
     text = data.get("text", "")
@@ -392,23 +399,22 @@ def tts(data: dict):
         return {"ok": False, "error": "No text provided"}
 
     try:
-        response = client.audio.speech.create(
-            model="gpt-4o-mini-tts",
-            voice="alloy",
-            input=text
-        )
+        def audio_stream():
+            with client.audio.speech.with_streaming_response.create(
+                model="gpt-4o-mini-tts",
+                voice="alloy",
+                input=text
+            ) as response:
+                for chunk in response.iter_bytes():
+                    yield chunk
 
-        audio_bytes = response.content
-
-        return StreamingResponse(
-            io.BytesIO(audio_bytes),
-            media_type="audio/mpeg"
-        )
+        return StreamingResponse(audio_stream(), media_type="audio/mpeg")
 
     except Exception as e:
         return {
             "ok": False,
             "error": str(e)
+        
         }
 
 @app.post("/chat")
