@@ -380,18 +380,31 @@ def run_proactive_check():
             "error": str(e)
         }
 
-    @app.post("/chat")
-    async def chat(data: dict):
-    try: 
+@app.post("/chat")
+async def chat(data: dict):
+    try:
         message = data.get("message", "").strip()
         user_id = "default"
         emotion = "neutre"
 
-        if not message: return {
-        "ok": True,
-        "created": False,
-        "data": None
-    }
+        if not message:
+            return {
+                "ok": True,
+                "created": False,
+                "data": None
+            }
+
+        return {
+            "answer": "Message reçu"
+        }
+
+    except Exception as e:
+        return {
+            "ok": False,
+            "error": str(e)
+        
+        }
+    
         print("MESSAGE RECU:", repr(message))
 
         # 1) Détection prénom
