@@ -225,8 +225,8 @@ def build_proactive_message(user_id: str, facts: dict):
 
     # Règles simples de départ
     # 1) si objectif connu et plus de 12h sans message user
-    if objectif and hours_since_last_user_msg is not None and hours_since_last_user_msg >= 12:
-        return f"{user_name}, tu voulais finir KOÉ. Où en es-tu aujourd'hui ?"
+    if objectif:
+     return f"{user_name}, tu voulais finir KOÉ. Où en es-tu aujourd'hui ?"
 
     # 2) si préférence matin connue et aucun message récent (>12h)
     current_hour_utc = now_dt.hour
