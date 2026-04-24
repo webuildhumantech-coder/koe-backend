@@ -379,11 +379,10 @@ def run_proactive_check():
             "ok": False,
             "error": str(e)
         }
-    @app.post("/tts")
-    def tts(data: dict):
+@app.post("/tts")
+def tts(data: dict):
       text = data.get("text", "")
-
-    return {
+      return {
         "ok": True,
         "text": text
     }
