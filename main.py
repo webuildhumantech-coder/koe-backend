@@ -9,7 +9,6 @@ from openai import OpenAI
 from fastapi.responses import Response
 from fastapi.responses import FileResponse
 import tempfile
-import os
 
 # ========================
 # CONFIG
@@ -35,8 +34,6 @@ SYSTEM_PROMPT = """
 Tu es KOÉ, une intelligence calme, élégante et humaine.
 Tu réponds avec simplicité, clarté et profondeur.
 Tu engages la conversation naturellement.
-Quand une information fiable sur l’utilisateur est connue, tu peux t’en servir.
-Tu peux relancer l’utilisateur avec douceur sur ses objectifs ou ses préférences si cela est pertinent.
 """
 
 # ========================
@@ -93,7 +90,6 @@ def extract_fact(message: str):
 
     return None
 
-
 def get_user_facts(user_id: str) -> dict:
     facts = {}
 
@@ -124,7 +120,6 @@ def get_user_facts(user_id: str) -> dict:
         print("ERREUR get_user_facts:", e)
 
     return facts
-
 
 def build_proactive_hint(message: str, facts: dict) -> str:
     normalized = normalize_text(message).lower()
@@ -161,7 +156,6 @@ def build_proactive_hint(message: str, facts: dict) -> str:
 
     return ""
 
-
 def get_latest_user_message_time(user_id: str):
     try:
         result = (
@@ -180,7 +174,6 @@ def get_latest_user_message_time(user_id: str):
         print("ERREUR get_latest_user_message_time:", e)
 
     return None
-
 
 def has_pending_proactive_message(user_id: str) -> bool:
     try:
@@ -266,7 +259,6 @@ def create_proactive_message_if_needed(user_id: str):
     except Exception as e:
         print("ERREUR create_proactive_message_if_needed:", e)
         return None
-
 
 # ========================
 # ROUTES
@@ -430,12 +422,47 @@ def tts(data: dict):
             "ok": False,
             "error": str(e)
         }
+    
+@app.post("/chat")
+async def chat(data: dict):
+    try:
+        message = data.get("message", "").strip()
+        user_id = "default"
+        emotion = "neutre"
+
+        if not message:
+            return {
+                "ok": True,
+                "created": False,
+                "data": None
+            }
+
+            response = client.responses.create(
+            model="gpt-4.1-mini",
+            input=f"""
+{SYSTEM_PROMPT}
+
+Utilisateur : {message}
+"""
+)
+            answer = response.output_text.strip()
+
+            return {"answer": answer}
+
+    except Exception as e:
+        return {
+            "ok": False,
+            "error": str(e)
+        }
+    
 @app.post("/chat-voice")
 async def chat_voice(data: dict):
     try:
         chat_result = await chat(data)
 
         answer = chat_result.get("answer") or chat_result.get("data") or ""
+
+        print("ANSWER:", answer)
 
         if not answer:
             return {
@@ -455,7 +482,7 @@ async def chat_voice(data: dict):
         ) as response:
             response.stream_to_file(tmp_path)
 
-        print("CHAT VOICE FILE SIZE:", os.path.getsize(tmp_path))
+        print("CHAT VOICE SIZE:", os.path.getsize(tmp_path))
 
         return FileResponse(
             tmp_path,
@@ -468,32 +495,6 @@ async def chat_voice(data: dict):
             "ok": False,
             "error": str(e)
         }
-    
-@app.post("/chat")
-async def chat(data: dict):
-    try:
-        message = data.get("message", "").strip()
-        user_id = "default"
-        emotion = "neutre"
-
-        if not message:
-            return {
-                "ok": True,
-                "created": False,
-                "data": None
-            }
-
-        return {
-            "answer": "Message reçu"
-        }
-
-    except Exception as e:
-        return {
-            "ok": False,
-            "error": str(e)
-        
-        }
-    
         print("MESSAGE RECU:", repr(message))
 
         # 1) Détection prénom
@@ -762,3 +763,4 @@ async def chat(data: dict):
     except Exception as e:
         print("ERREUR BACKEND GLOBALE:", e)
         return {"answer": f"Erreur backend : {str(e)}"}
+    
