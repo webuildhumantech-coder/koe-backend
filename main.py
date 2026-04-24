@@ -7,8 +7,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from supabase import create_client
 from openai import OpenAI
 from fastapi.responses import Response
-from fastapi.responses import FileResponse,Response
-import tempfile
+
+
 
 # ========================
 # CONFIG
@@ -396,32 +396,34 @@ def tts(data: dict):
     if not text:
         return {"ok": False, "error": "No text provided"}
 
-    try:
-        tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".mp3")
-        tmp_path = tmp.name
-        tmp.close()
+        try:
+            tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".mp3")
+            tmp_path = tmp.name
+            tmp.close()
 
-        with client.audio.speech.with_streaming_response.create(
-            model="gpt-4o-mini-tts",
-            voice="alloy",
-            input=text,
-            response_format="mp3"
-        ) as response:
-            response.stream_to_file(tmp_path)
+            with client.audio.speech.with_streaming_response.create(
+                model="gpt-4o-mini-tts",
+                voice="alloy",
+                input=answer,
+                response_format="mp3"
+            ) as response:
+                response.stream_to_file(tmp_path)
 
-        print("TTS FILE SIZE:", os.path.getsize(tmp_path))
+            print("CHAT VOICE FILE SIZE:", os.path.getsize(tmp_path))
 
-        return FileResponse(
-            tmp_path,
-            media_type="audio/mpeg",
-            filename="koe.mp3"
-        )
+            with open(tmp_path, "rb") as f:
+                audio_bytes = f.read()
 
-    except Exception as e:
-        return {
-            "ok": False,
-            "error": str(e)
-        }
+            return Response(
+                content=audio_bytes,
+                media_type="audio/mpeg"
+            )
+
+        except Exception as e:
+            return {
+                "ok": False,
+                "error": str(e)
+            }
     
 @app.post("/chat")
 async def chat(data: dict):
