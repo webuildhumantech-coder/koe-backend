@@ -9,7 +9,7 @@ from openai import OpenAI
 from fastapi.responses import Response
 from fastapi.responses import FileResponse
 import tempfile
-
+import os
 
 # ========================
 # CONFIG
