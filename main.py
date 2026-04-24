@@ -379,6 +379,14 @@ def run_proactive_check():
             "ok": False,
             "error": str(e)
         }
+    @app.post("/tts")
+    def tts(data: dict):
+      text = data.get("text", "")
+
+    return {
+        "ok": True,
+        "text": text
+    }
 
 @app.post("/chat")
 async def chat(data: dict):
