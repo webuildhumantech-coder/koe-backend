@@ -398,7 +398,7 @@ def tts(data: dict):
             input=text
         )
 
-        audio_bytes = response.read()
+        audio_bytes = response.content
 
         return StreamingResponse(
             io.BytesIO(audio_bytes),
