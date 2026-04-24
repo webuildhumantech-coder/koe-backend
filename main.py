@@ -328,7 +328,14 @@ def mark_proactive_shown(data: dict):
 @app.post("/run-proactive-check")
 def run_proactive_check():
     try:
-        message = "TEST KOÉ PROACTIF"
+        message = generate_proactive_message("default")
+
+        if not message:
+            return {
+                "ok": True,
+                "created": False,
+                "data": None
+            }
 
         result = supabase.table("proactive_messages").insert({
             "user_id": "default",
