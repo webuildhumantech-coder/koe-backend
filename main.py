@@ -195,7 +195,7 @@ def has_pending_proactive_message(user_id: str) -> bool:
 
 
 def build_proactive_message(user_id: str, facts: dict):
-    user_name = facts.get("name", "toi")
+    user_name = facts.get("user_name") or "toi"
     objectif = facts.get("objectif")
     preference = facts.get("preference")
 
@@ -267,6 +267,17 @@ def create_proactive_message_if_needed(user_id: str):
 # ========================
 # ROUTES
 # ========================
+def get_user_name(user_id):
+    result = supabase.table("user_profile") \
+        .select("name") \
+        .eq("user_id", user_id) \
+        .execute()
+
+    if result.data and len(result.data) > 0:
+        return result.data[0]["name"]
+
+    return None
+
 
 @app.get("/")
 def root():
@@ -331,11 +342,18 @@ def mark_proactive_shown(data: dict):
             "error": str(e)
         }
 
-
 @app.post("/run-proactive-check")
 def run_proactive_check():
     try:
-        message = build_proactive_message("default", {})
+        user_id = "default"
+
+        user_name = get_user_name(user_id)
+
+        facts = {
+            "user_name": user_name
+        }
+
+        message = build_proactive_message(user_id, facts)
 
         if not message:
             return {
@@ -345,7 +363,7 @@ def run_proactive_check():
             }
 
         result = supabase.table("proactive_messages").insert({
-            "user_id": "default",
+            "user_id": user_id,
             "message": message,
             "shown": False
         }).execute()
@@ -362,9 +380,9 @@ def run_proactive_check():
             "error": str(e)
         }
 
-@app.post("/chat")
-async def chat(data: dict):
-    try:
+    @app.post("/chat")
+    async def chat(data: dict):
+    try: 
         message = data.get("message", "").strip()
         user_id = "default"
         emotion = "neutre"
