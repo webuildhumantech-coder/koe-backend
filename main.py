@@ -39,6 +39,120 @@ Tu engages la conversation naturellement.
 # ========================
 # OUTILS
 # ========================
+def get_recent_memories(user_id="default", limit=12):
+
+    try:
+
+        result = (
+
+            supabase.table("memories")
+
+            .select("role,message,created_at")
+
+            .eq("user_id", user_id)
+
+            .order("created_at", desc=True)
+
+            .limit(limit)
+
+            .execute()
+
+        )
+
+        memories = result.data or []
+
+        memories.reverse()
+
+        return "\n".join(
+
+            [f"{m.get('role', 'user')}: {m.get('message', '')}" for m in memories]
+
+        )
+
+    except Exception as e:
+
+        print("MEMORY READ ERROR:", e)
+
+        return ""
+
+def save_memory(user_id, role, message, emotion="neutre"):
+
+    try:
+
+        supabase.table("memories").insert({
+
+            "user_id": user_id,
+
+            "message": message,
+
+            "emotion": emotion,
+
+            "role": role,
+
+            "type": "conversation",
+
+        }).execute()
+
+    except Exception as e:
+
+        print("MEMORY SAVE ERROR:", e)
+
+# =========================
+
+# 🔥 ENSUITE SEULEMENT
+
+# =========================
+
+@app.post("/chat")
+async def chat(data: dict):
+    try:
+        message = data.get("message", "").strip()
+        user_id = data.get("user_id", "default")
+        emotion = "neutre"
+
+        if not message:
+            return {
+                "ok": False,
+                "answer": "",
+                "error": "No message provided"
+            }
+
+        # 1) sauvegarde message utilisateur
+        save_memory(user_id, "user", message, emotion)
+
+        # 2) récupère mémoire récente
+        memory_context = get_recent_memories(user_id)
+
+        # 3) réponse KOÉ avec mémoire
+        response = client.responses.create(
+            model="gpt-4.1-mini",
+            input=f"""
+{SYSTEM_PROMPT}
+
+Mémoire récente de la conversation :
+{memory_context}
+
+Dernier message utilisateur :
+{message}
+"""
+        )
+
+        answer = response.output_text.strip()
+
+        # 4) sauvegarde réponse KOÉ
+        save_memory(user_id, "assistant", answer, "neutre")
+
+        return {
+            "ok": True,
+            "answer": answer
+        }
+
+    except Exception as e:
+        return {
+            "ok": False,
+            "answer": "",
+            "error": str(e)
+        }
 
 def normalize_text(text: str) -> str:
     return text.replace("\\'", "'").replace("\\", "").strip()
@@ -424,44 +538,6 @@ def tts(data: dict):
                 "ok": False,
                 "error": str(e)
             }
-    
-@app.post("/chat")
-async def chat(data: dict):
-    try:
-        message = data.get("message", "").strip()
-        user_id = "default"
-        emotion = "neutre"
-
-        if not message:
-            return {
-                "ok": True,
-                "answer": "",
-                "error": "No message provided"
-            }
-
-        response = client.responses.create(
-            model="gpt-4.1-mini",
-            input=f"""
-{SYSTEM_PROMPT}
-
-Utilisateur : {message}
-"""
-        )
-
-        answer = response.output_text.strip()
-
-        return {
-            "ok": True,
-            "answer": answer
-        }
-
-    except Exception as e:
-        return {
-            "ok": False,
-            "answer": "",
-            "error": str(e)
-        }
-
 
 @app.post("/chat-voice")
 async def chat_voice(data: dict):

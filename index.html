@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <title>KOÉ</title>
+</head>
+<body style="font-family: sans-serif; text-align: center; margin-top: 100px;">
+
+  <h1>KOÉ 🎙️</h1>
+
+  <input id="input" placeholder="Parle à KOÉ..." style="width: 300px; padding: 10px;" />
+  <br><br>
+
+  <button onclick="talk()">Envoyer</button>
+
+  <p id="status"></p>
+
+  <script>
+    async function talk() {
+      const message = document.getElementById("input").value;
+      const status = document.getElementById("status");
+
+      if (!message) return;
+
+      status.innerText = "KOÉ réfléchit...";
+
+      const res = await fetch("https://koe-backend.onrender.com/chat-voice", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ message })
+      });
+
+      const audioBlob = await res.blob();
+      const audioUrl = URL.createObjectURL(audioBlob);
+
+      const audio = new Audio(audioUrl);
+
+      status.innerText = "KOÉ parle...";
+      await audio.play();
+
+      status.innerText = "";
+    }
+  </script>
+
+</body>
+</html>
