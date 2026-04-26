@@ -39,8 +39,7 @@ Tu engages la conversation naturellement.
 # ========================
 # OUTILS
 # ========================
-def get_recent_memories(user_id="default", limit=12):
-
+def get_recent_memories(user_id, limit=12):
     try:
 
         result = (
@@ -378,6 +377,7 @@ def create_proactive_message_if_needed(user_id: str):
 # ROUTES
 # ========================
 def get_user_name(user_id):
+    print("USER ID:", user_id)
     result = supabase.table("user_profile") \
         .select("name") \
         .eq("user_id", user_id) \
