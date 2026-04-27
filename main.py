@@ -398,9 +398,21 @@ async def chat(data: dict):
 
         # 1) Détection prénom
         extracted_name = extract_name(message)
+        
         if extracted_name:
-            save_user_name(user_id, extracted_name)
+            supabase.table("user_profile").upsert({
+            "user_id": user_id,
+            "name": extracted_name
+            }).execute()
 
+            supabase.table("memories").insert({
+            "user_id": user_id,
+            "message": extracted_name,
+            "emotion": "neutre",
+            "role": "system",
+            "type": "name",
+             }).execute()
+            
         # 2) Détection faits
         extracted_fact = extract_fact(message)
         if extracted_fact and extracted_fact.get("value"):
