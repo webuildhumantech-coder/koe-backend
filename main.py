@@ -371,7 +371,8 @@ async def chat(data: dict):
         user_id = data.get("user_id")
         emotion = "neutre"
 
-        print("CHAT USER_ID:", user_id)
+        print("USER ID =", user_id)
+        print("MESSAGE =", message)
 
         if not user_id:
             return {
