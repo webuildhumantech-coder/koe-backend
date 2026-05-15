@@ -395,18 +395,19 @@ async def chat(data: dict):
 
         normalized_message = normalize_text(message).lower()
         
-      history_response = (
-    supabase.table("messages")
-    .select("role,text")
-    .eq("user_id", user_id)
-    .order("created_at", desc=True)
-    .limit(12)
-    .execute()
-)
+        normalized_message = normalize_text(message).lower()
 
-history = history_response.data or []
-history.reverse()
+        history_response = (
+                supabase.table("messages")
+                .select("role,text")
+                .eq("user_id", user_id)
+                .order("created_at", desc=True)
+                .limit(12)
+                .execute()
+            )
 
+        history = history_response.data or []
+        history.reverse()
         # 1) Détection prénom
         extracted_name = extract_name(message)
         
@@ -534,7 +535,7 @@ history.reverse()
         for msg in history:
             if msg.get("role") in ["user", "assistant"] and msg.get("text"):
 
-        conversation_context.append({
+             conversation_context.append({
             "role": msg.get("role"),
             "content": msg.get("text"),
         })
