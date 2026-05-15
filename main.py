@@ -394,6 +394,18 @@ async def chat(data: dict):
             }
 
         normalized_message = normalize_text(message).lower()
+        
+      history_response = (
+    supabase.table("messages")
+    .select("role,text")
+    .eq("user_id", user_id)
+    .order("created_at", desc=True)
+    .limit(12)
+    .execute()
+)
+
+history = history_response.data or []
+history.reverse()
 
         # 1) Détection prénom
         extracted_name = extract_name(message)
@@ -519,13 +531,20 @@ async def chat(data: dict):
                 "role": mem.get("role"),
                 "content": mem.get("message"),
             })
+        for msg in history:
+            if msg.get("role") in ["user", "assistant"] and msg.get("text"):
 
+        conversation_context.append({
+            "role": msg.get("role"),
+            "content": msg.get("text"),
+        })
+        
+        # 7) Appel OpenAI
         conversation_context.append({
             "role": "user",
             "content": message,
+        
         })
-
-        # 7) Appel OpenAI
         response = client.responses.create(
             model="gpt-4.1-mini",
             input=conversation_context,
