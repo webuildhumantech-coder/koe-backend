@@ -109,10 +109,37 @@ def extract_fact(message: str):
     lowered = cleaned.lower()
 
     patterns = [
+
+        # Objectifs / ambitions
         (r"mon objectif est de\s+(.+)", "objectif"),
         (r"je veux\s+(.+)", "objectif"),
+        (r"je compte\s+(.+)", "projet"),
+        (r"je vais\s+(.+)", "projet"),
+
+        # Préférences / goûts
         (r"je préfère\s+(.+)", "preference"),
         (r"j'aime\s+(.+)", "preference"),
+        (r"j’adore\s+(.+)", "preference"),
+
+        # Travail / activité
+        (r"je travaille sur\s+(.+)", "travail"),
+        (r"mon projet est\s+(.+)", "travail"),
+
+        # Relations
+        (r"ma copine\s+(.+)", "relation"),
+        (r"mon frère\s+(.+)", "relation"),
+        (r"ma soeur\s+(.+)", "relation"),
+        (r"mon ami\s+(.+)", "relation"),
+
+        # Émotions fortes
+        (r"je suis triste\s*(.+)?", "emotion"),
+        (r"je suis heureux\s*(.+)?", "emotion"),
+        (r"j'ai peur de\s+(.+)", "emotion"),
+
+        # Habitudes
+        (r"je fais du sport\s*(.+)?", "habitude"),
+        (r"je vais à la salle\s*(.+)?", "habitude"),
+
     ]
 
     for pattern, fact_type in patterns:
