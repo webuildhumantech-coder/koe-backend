@@ -1,6 +1,8 @@
 import os
 import re
 import tempfile
+import time
+import random
 from datetime import datetime, timezone
 
 from fastapi import FastAPI
@@ -618,7 +620,8 @@ async def chat(data: dict):
             input=conversation_context,
         )
 
-        answer = response.output_text.strip()
+        answer = response.output_text.strip() 
+        time.sleep(random.uniform(0.4, 1.2))
 
         # 8) Sauvegarde réponse assistant
         save_memory(user_id, "assistant", answer, "neutre")
