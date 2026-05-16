@@ -97,6 +97,19 @@ def get_recent_memories(user_id: str, limit=12):
 
 def save_memory(user_id, role, message, emotion="neutre", memory_type="conversation"):
     try:
+
+        existing = (
+            supabase.table("memories")
+            .select("*")
+            .eq("user_id", user_id)
+            .eq("message", message)
+            .eq("type", memory_type)
+            .execute()
+        )
+
+        if existing.data and len(existing.data) > 0:
+            return
+
         supabase.table("memories").insert({
             "user_id": user_id,
             "message": message,
@@ -104,6 +117,7 @@ def save_memory(user_id, role, message, emotion="neutre", memory_type="conversat
             "role": role,
             "type": memory_type,
         }).execute()
+
     except Exception as e:
         print("MEMORY SAVE ERROR:", e)
 
