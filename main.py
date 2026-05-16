@@ -540,6 +540,36 @@ async def chat(data: dict):
                 "content": f"L'utilisateur préfère {facts['preference']}.",
             })
 
+            if facts.get("projet"):
+             conversation_context.append({
+        "role": "system",
+        "content": f"L'utilisateur a comme projet : {facts['projet']}.",
+    })
+
+            if facts.get("travail"):
+              conversation_context.append({
+        "role": "system",
+        "content": f"L'utilisateur travaille actuellement sur : {facts['travail']}.",
+    })
+
+            if facts.get("relation"):
+              conversation_context.append({
+        "role": "system",
+        "content": f"Information relationnelle importante : {facts['relation']}.",
+    })
+
+            if facts.get("emotion"):
+               conversation_context.append({
+        "role": "system",
+        "content": f"État émotionnel notable de l'utilisateur : {facts['emotion']}.",
+    })
+
+            if facts.get("habitude"):
+               conversation_context.append({
+        "role": "system",
+        "content": f"Habitude connue de l'utilisateur : {facts['habitude']}.",
+    })
+
         proactive_hint = build_proactive_hint(message, facts)
         if proactive_hint:
             conversation_context.append({
