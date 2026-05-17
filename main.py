@@ -78,7 +78,7 @@ def get_recent_memories(user_id: str, limit=12):
     try:
         result = (
             supabase.table("memories")
-            .select("role,message,created_at,type")
+            .select("role,message,created_at,type,importance")
             .eq("user_id", user_id)
             .order("created_at", desc=True)
             .limit(limit)
@@ -565,7 +565,19 @@ async def chat(data: dict):
         conversation_context = [
             {"role": "system", "content": SYSTEM_PROMPT}
         ]
+        for mem in high_memories[-10:]:
+         if mem.get("message"):
+          conversation_context.append({
+            "role": "system",
+            "content": f"Mémoire importante utilisateur : {mem.get('message')}"
+        })
 
+        for mem in medium_memories[-5:]:
+         if mem.get("message"):
+          conversation_context.append({
+            "role": "system",
+            "content": f"Contexte utilisateur utile : {mem.get('message')}"
+        })
         if user_name:
             conversation_context.append({
                 "role": "system",
@@ -621,6 +633,15 @@ async def chat(data: dict):
                 "content": proactive_hint,
             })
 
+        high_memories = [
+        m for m in raw_memories
+        if m.get("importance") == "high"
+]
+
+        medium_memories = [
+        m for m in raw_memories
+        if m.get("importance") == "medium"
+]
         conversation_memories = [
             m for m in raw_memories
             if m.get("role") in ["user", "assistant"]
@@ -645,6 +666,7 @@ async def chat(data: dict):
         conversation_context.append({
             "role": "user",
             "content": message,
+
         
         })
         response = client.responses.create(
