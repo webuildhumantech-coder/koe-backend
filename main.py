@@ -93,7 +93,24 @@ def get_recent_memories(user_id: str, limit=12):
     except Exception as e:
         print("MEMORY READ ERROR:", e)
         return []
+    
+    def get_memory_importance(memory_type, emotion="neutre"):
+     if memory_type in ["name", "identity"]:
+        return "high"
 
+    if memory_type in ["objectif", "projet", "travail", "relation"]:
+        return "high"
+
+    if memory_type == "emotion":
+        return "high"
+
+    if memory_type in ["preference", "habitude"]:
+        return "medium"
+
+    if memory_type == "conversation":
+        return "low"
+
+    return "medium"
 
 def save_memory(user_id, role, message, emotion="neutre", memory_type="conversation"):
     try:
@@ -116,6 +133,7 @@ def save_memory(user_id, role, message, emotion="neutre", memory_type="conversat
             "emotion": emotion,
             "role": role,
             "type": memory_type,
+            "importance":get_memory_importance(memory_type, emotion), 
         }).execute()
 
     except Exception as e:
