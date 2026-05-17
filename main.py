@@ -578,6 +578,7 @@ async def chat(data: dict):
             "role": "system",
             "content": f"Contexte utilisateur utile : {mem.get('message')}"
         })
+          
         if user_name:
             conversation_context.append({
                 "role": "system",
@@ -634,20 +635,21 @@ async def chat(data: dict):
             })
 
         high_memories = [
-        m for m in raw_memories
-        if m.get("importance") == "high"
+    m for m in raw_memories
+    if m.get("importance") == "high"
 ]
 
         medium_memories = [
-        m for m in raw_memories
-        if m.get("importance") == "medium"
+    m for m in raw_memories
+    if m.get("importance") == "medium"
 ]
+
         conversation_memories = [
-            m for m in raw_memories
-            if m.get("role") in ["user", "assistant"]
-            and m.get("message")
-            and m.get("type") == "conversation"
-        ]
+    m for m in raw_memories
+    if m.get("role") in ["user", "assistant"]
+    and m.get("message")
+    and m.get("type") == "conversation"
+]
 
         for mem in conversation_memories[-10:]:
             conversation_context.append({
