@@ -12,10 +12,6 @@ from supabase import create_client
 from openai import OpenAI
 
 
-# ========================
-# CONFIG
-# ========================
-
 SUPABASE_URL = "https://zxuysoqknkzjmpftqupl.supabase.co"
 SUPABASE_KEY = "sb_publishable_rrh5vevB5bc5E1xauwOaPw_EyG3xSW8"
 
@@ -32,7 +28,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-SYSTEM_PROMPT = SYSTEM_PROMPT = """
+SYSTEM_PROMPT = """
 Tu es KOÉ, une intelligence calme, élégante et humaine.
 Tu réponds avec simplicité, clarté et profondeur.
 Tu engages la conversation naturellement.
@@ -51,9 +47,7 @@ Si tu ne connais pas son prénom, ne devine pas.
 - Garde une présence calme, intelligente et naturelle.
 - Évite les réponses trop longues sauf si nécessaire.
 """
-# ========================
-# OUTILS MÉMOIRE
-# ========================
+
 
 def normalize_text(text: str) -> str:
     return text.replace("\\'", "'").replace("\\", "").strip()
@@ -87,15 +81,15 @@ def get_recent_memories(user_id: str, limit=12):
 
         memories = result.data or []
         memories.reverse()
-
         return memories
 
     except Exception as e:
         print("MEMORY READ ERROR:", e)
         return []
-    
-    def get_memory_importance(memory_type, emotion="neutre"):
-     if memory_type in ["name", "identity"]:
+
+
+def get_memory_importance(memory_type, emotion="neutre"):
+    if memory_type in ["name", "identity"]:
         return "high"
 
     if memory_type in ["objectif", "projet", "travail", "relation"]:
@@ -112,9 +106,9 @@ def get_recent_memories(user_id: str, limit=12):
 
     return "medium"
 
+
 def save_memory(user_id, role, message, emotion="neutre", memory_type="conversation"):
     try:
-
         existing = (
             supabase.table("memories")
             .select("*")
@@ -133,7 +127,7 @@ def save_memory(user_id, role, message, emotion="neutre", memory_type="conversat
             "emotion": emotion,
             "role": role,
             "type": memory_type,
-            "importance":get_memory_importance(memory_type, emotion), 
+            "importance": get_memory_importance(memory_type, emotion),
         }).execute()
 
     except Exception as e:
@@ -153,48 +147,44 @@ def extract_fact(message: str):
     lowered = cleaned.lower()
 
     patterns = [
-
-        # Objectifs / ambitions
         (r"mon objectif est de\s+(.+)", "objectif"),
         (r"je veux\s+(.+)", "objectif"),
         (r"je compte\s+(.+)", "projet"),
         (r"je vais\s+(.+)", "projet"),
 
-        # Préférences / goûts
         (r"je préfère\s+(.+)", "preference"),
         (r"j'aime\s+(.+)", "preference"),
         (r"j’adore\s+(.+)", "preference"),
 
-        # Travail / activité
         (r"je travaille sur\s+(.+)", "travail"),
         (r"mon projet est\s+(.+)", "travail"),
 
-        # Relations
         (r"ma copine\s+(.+)", "relation"),
         (r"mon frère\s+(.+)", "relation"),
         (r"ma soeur\s+(.+)", "relation"),
         (r"mon ami\s+(.+)", "relation"),
 
-        # Émotions fortes
         (r"je suis triste\s*(.+)?", "emotion"),
         (r"je suis heureux\s*(.+)?", "emotion"),
         (r"j'ai peur de\s+(.+)", "emotion"),
 
-        # Habitudes
         (r"je fais du sport\s*(.+)?", "habitude"),
         (r"je vais à la salle\s*(.+)?", "habitude"),
-
     ]
 
     for pattern, fact_type in patterns:
         match = re.search(pattern, lowered, re.IGNORECASE)
         if match:
-            value = match.group(1).strip()
+            value = match.group(1).strip() if match.group(1) else ""
             if value:
                 return {
                     "fact_type": fact_type,
                     "value": value,
                 }
+
+    return None
+
+
 def get_user_name(user_id: str):
     try:
         result = (
@@ -211,6 +201,7 @@ def get_user_name(user_id: str):
         print("ERREUR get_user_name:", e)
 
     return None
+
 
 def save_user_name(user_id: str, name: str):
     try:
@@ -244,7 +235,16 @@ def get_user_facts(user_id: str) -> dict:
             supabase.table("memories")
             .select("message,type")
             .eq("user_id", user_id)
-            .in_("type", ["name", "objectif", "preference"])
+            .in_("type", [
+                "name",
+                "objectif",
+                "preference",
+                "projet",
+                "travail",
+                "relation",
+                "emotion",
+                "habitude",
+            ])
             .order("created_at", desc=False)
             .execute()
         )
@@ -255,12 +255,8 @@ def get_user_facts(user_id: str) -> dict:
             t = row.get("type")
             v = row.get("message")
 
-            if t == "name" and v:
-                facts["name"] = v
-            elif t == "objectif" and v:
-                facts["objectif"] = v
-            elif t == "preference" and v:
-                facts["preference"] = v
+            if t and v:
+                facts[t] = v
 
     except Exception as e:
         print("ERREUR get_user_facts:", e)
@@ -322,10 +318,6 @@ def build_proactive_hint(message: str, facts: dict) -> str:
     return ""
 
 
-# ========================
-# PROACTIF
-# ========================
-
 def get_latest_user_message_time(user_id: str):
     try:
         result = (
@@ -337,9 +329,12 @@ def get_latest_user_message_time(user_id: str):
             .limit(1)
             .execute()
         )
+
         rows = result.data or []
+
         if rows:
             return parse_iso_date(rows[0].get("created_at"))
+
     except Exception as e:
         print("ERREUR get_latest_user_message_time:", e)
 
@@ -356,7 +351,9 @@ def has_pending_proactive_message(user_id: str) -> bool:
             .limit(1)
             .execute()
         )
+
         return bool(result.data)
+
     except Exception as e:
         print("ERREUR has_pending_proactive_message:", e)
         return False
@@ -375,6 +372,7 @@ def build_proactive_message(user_id: str, facts: dict):
     now_dt = datetime.now(timezone.utc)
 
     hours_since_last_user_msg = None
+
     if latest_user_dt:
         hours_since_last_user_msg = (now_dt - latest_user_dt).total_seconds() / 3600
 
@@ -412,16 +410,14 @@ def create_proactive_message_if_needed(user_id: str):
             })
             .execute()
         )
+
         print("PROACTIVE MESSAGE CREATED:", proactive_message)
         return result.data
+
     except Exception as e:
         print("ERREUR create_proactive_message_if_needed:", e)
         return None
 
-
-# ========================
-# ROUTES
-# ========================
 
 @app.get("/")
 def root():
@@ -430,9 +426,7 @@ def root():
 
 @app.post("/chat")
 async def chat(data: dict):
-
     try:
-
         user_id = data.get("user_id", "default")
         message = data.get("message", "")
         emotion = data.get("emotion", "neutre")
@@ -440,14 +434,63 @@ async def chat(data: dict):
         if not message:
             return {
                 "ok": False,
+                "answer": "",
                 "error": "No message"
             }
 
         normalized_message = normalize_text(message).lower()
 
-        # ========================
-        # Historique messages
-        # ========================
+        extracted_name = extract_name(message)
+
+        if extracted_name:
+            save_user_name(user_id, extracted_name)
+
+        extracted_fact = extract_fact(message)
+
+        if extracted_fact and extracted_fact.get("value"):
+            save_structured_fact(
+                user_id,
+                extracted_fact["fact_type"],
+                extracted_fact["value"]
+            )
+
+        user_name = get_user_name(user_id)
+        facts = get_user_facts(user_id)
+
+        if not user_name and facts.get("name"):
+            user_name = facts.get("name")
+
+        save_memory(user_id, "user", message, emotion)
+
+        if (
+            "comment je m'appelle" in normalized_message
+            or "quel est mon prénom" in normalized_message
+            or "tu te souviens de mon prénom" in normalized_message
+        ):
+            if user_name:
+                answer = f"Tu t'appelles {user_name}."
+            else:
+                answer = "Je ne connais pas encore ton prénom."
+
+            save_memory(user_id, "assistant", answer, "neutre")
+
+            return {
+                "ok": True,
+                "answer": answer
+            }
+
+        if "quel est mon objectif" in normalized_message:
+            if facts.get("objectif"):
+                answer = f"Ton objectif actuel est de {facts['objectif']}."
+            else:
+                answer = "Je ne connais pas encore ton objectif."
+
+            save_memory(user_id, "assistant", answer, "neutre")
+
+            return {
+                "ok": True,
+                "answer": answer
+            }
 
         history_response = (
             supabase.table("messages")
@@ -460,48 +503,6 @@ async def chat(data: dict):
 
         history = history_response.data or []
         history.reverse()
-
-        # ========================
-        # Détection prénom
-        # ========================
-
-        extracted_name = extract_name(message)
-
-        if extracted_name:
-            save_user_name(user_id, extracted_name)
-
-        # ========================
-        # Détection faits
-        # ========================
-
-        extracted_fact = extract_fact(message)
-
-        if extracted_fact and extracted_fact.get("value"):
-            save_structured_fact(
-                user_id,
-                extracted_fact["fact_type"],
-                extracted_fact["value"]
-            )
-
-        # ========================
-        # Profil utilisateur
-        # ========================
-
-        user_name = get_user_name(user_id)
-        facts = get_user_facts(user_id)
-
-        if not user_name and facts.get("name"):
-            user_name = facts.get("name")
-
-        # ========================
-        # Sauvegarde user
-        # ========================
-
-        save_memory(user_id, "user", message, emotion)
-
-        # ========================
-        # Lecture mémoire
-        # ========================
 
         raw_memories = get_recent_memories(user_id, limit=30)
 
@@ -517,14 +518,12 @@ async def chat(data: dict):
 
         conversation_memories = [
             m for m in raw_memories
-            if m.get("role") in ["user", "assistant"]
-            and m.get("message")
-            and m.get("type") == "conversation"
+            if (
+                m.get("role") in ["user", "assistant"]
+                and m.get("message")
+                and m.get("type") == "conversation"
+            )
         ]
-
-        # ========================
-        # Construction contexte
-        # ========================
 
         conversation_context = [
             {
@@ -533,61 +532,54 @@ async def chat(data: dict):
             }
         ]
 
-        # Mémoire importante
+        if user_name:
+            conversation_context.append({
+                "role": "system",
+                "content": f"L'utilisateur s'appelle {user_name}.",
+            })
 
         for mem in high_memories[-10:]:
-
             if mem.get("message"):
-
                 conversation_context.append({
                     "role": "system",
                     "content": f"Mémoire importante utilisateur : {mem.get('message')}"
                 })
 
-        # Mémoire secondaire
-
         for mem in medium_memories[-5:]:
-
             if mem.get("message"):
-
                 conversation_context.append({
                     "role": "system",
                     "content": f"Contexte utilisateur utile : {mem.get('message')}"
                 })
 
-        # Historique conversationnel
-
         for mem in conversation_memories[-10:]:
-
             conversation_context.append({
                 "role": mem.get("role"),
                 "content": mem.get("message")
             })
 
-        # Historique récent DB messages
-
         for msg in history:
-
             if (
                 msg.get("role") in ["user", "assistant"]
                 and msg.get("text")
             ):
-
                 conversation_context.append({
                     "role": msg.get("role"),
                     "content": msg.get("text")
                 })
 
-        # Message utilisateur actuel
+        proactive_hint = build_proactive_hint(message, facts)
+
+        if proactive_hint:
+            conversation_context.append({
+                "role": "system",
+                "content": proactive_hint,
+            })
 
         conversation_context.append({
             "role": "user",
             "content": message
         })
-
-        # ========================
-        # OpenAI
-        # ========================
 
         response = client.responses.create(
             model="gpt-4.1-mini",
@@ -597,48 +589,6 @@ async def chat(data: dict):
         answer = response.output_text.strip()
 
         time.sleep(random.uniform(0.4, 1.2))
-
-        # ========================
-        # Sauvegarde assistant
-        # ========================
-
-        save_memory(
-            user_id,
-            "assistant",
-            answer,
-            "neutre"
-        )
-
-        return {
-            "ok": True,
-            "answer": answer
-        }
-
-    except Exception as e:
-
-        print("ERREUR BACKEND GLOBALE:", e)
-
-        return {
-            "ok": False,
-            "answer": "",
-            "error": str(e)
-        }
-
-
-# ========================
-# CHAT VOICE
-# ========================
-
-@app.post("/chat")
-
-async def chat(data: dict):
-
-    try:
-
-        # ton code
-        # memories
-        # openai
-        # answer
 
         save_memory(user_id, "assistant", answer, "neutre")
 
@@ -656,294 +606,27 @@ async def chat(data: dict):
             "error": str(e)
         }
 
-        normalized_message = normalize_text(message).lower()
-        
-        normalized_message = normalize_text(message).lower()
-
-        history_response = (
-                supabase.table("messages")
-                .select("role,text")
-                .eq("user_id", user_id)
-                .order("created_at", desc=True)
-                .limit(12)
-                .execute()
-            )
-
-        history = history_response.data or []
-        history.reverse()
-        # 1) Détection prénom
-        extracted_name = extract_name(message)
-        
-        if extracted_name:
-            supabase.table("user_profile").upsert({
-            "user_id": user_id,
-            "name": extracted_name
-            }).execute()
-
-            supabase.table("memories").insert({
-            "user_id": user_id,
-            "message": extracted_name,
-            "emotion": "neutre",
-            "role": "system",
-            "type": "name",
-             }).execute()
-            
-        # 2) Détection faits
-        extracted_fact = extract_fact(message)
-        if extracted_fact and extracted_fact.get("value"):
-            save_structured_fact(
-                user_id,
-                extracted_fact["fact_type"],
-                extracted_fact["value"],
-            )
-
-        # 3) Lecture profil/faits
-        user_name = get_user_name(user_id)
-        facts = get_user_facts(user_id)
-
-        if not user_name and facts.get("name"):
-            user_name = facts.get("name")
-
-        # 4) Sauvegarde message utilisateur
-        save_memory(user_id, "user", message, emotion)
-
-        # 5) Réponses directes
-        if (
-            "comment je m'appelle" in normalized_message
-            or "quel est mon prénom" in normalized_message
-            or "tu te souviens de mon prénom" in normalized_message
-        ):
-            if user_name:
-                answer = f"Tu t'appelles {user_name}."
-            else:
-                answer = "Je ne connais pas encore ton prénom."
-
-            save_memory(user_id, "assistant", answer, "neutre")
-            return {
-                "ok": True,
-                "answer": answer
-            }
-
-        if "quel est mon objectif" in normalized_message:
-            if facts.get("objectif"):
-                answer = f"Ton objectif actuel est de {facts['objectif']}."
-            else:
-                answer = "Je ne connais pas encore ton objectif."
-
-            save_memory(user_id, "assistant", answer, "neutre")
-            return {
-                "ok": True,
-                "answer": answer
-            }
-
-        if (
-            "quand est-ce que je préfère parler" in normalized_message
-            or "je préfère parler quand" in normalized_message
-        ):
-            if facts.get("preference"):
-                answer = f"Tu préfères {facts['preference']}."
-            else:
-                answer = "Je ne connais pas encore ta préférence."
-
-            save_memory(user_id, "assistant", answer, "neutre")
-            return {
-                "ok": True,
-                "answer": answer
-            }
-
-        # 6) Lecture mémoire récente
-        raw_memories = get_recent_memories(user_id, limit=30)
-
-        conversation_context = [
-            {"role": "system", "content": SYSTEM_PROMPT}
-        ]
-        for mem in high_memories[-10:]:
-         if mem.get("message"):
-          conversation_context.append({
-            "role": "system",
-            "content": f"Mémoire importante utilisateur : {mem.get('message')}"
-        })
-
-        for mem in medium_memories[-5:]:
-         if mem.get("message"):
-          conversation_context.append({
-            "role": "system",
-            "content": f"Contexte utilisateur utile : {mem.get('message')}"
-        })
-          
-        if user_name:
-            conversation_context.append({
-                "role": "system",
-                "content": f"L'utilisateur s'appelle {user_name}.",
-            })
-
-        if facts.get("objectif"):
-            conversation_context.append({
-                "role": "system",
-                "content": f"L'objectif actuel de l'utilisateur est de {facts['objectif']}.",
-            })
-
-        if facts.get("preference"):
-            conversation_context.append({
-                "role": "system",
-                "content": f"L'utilisateur préfère {facts['preference']}.",
-            })
-
-            if facts.get("projet"):
-             conversation_context.append({
-        "role": "system",
-        "content": f"L'utilisateur a comme projet : {facts['projet']}.",
-    })
-
-            if facts.get("travail"):
-              conversation_context.append({
-        "role": "system",
-        "content": f"L'utilisateur travaille actuellement sur : {facts['travail']}.",
-    })
-
-            if facts.get("relation"):
-              conversation_context.append({
-        "role": "system",
-        "content": f"Information relationnelle importante : {facts['relation']}.",
-    })
-
-            if facts.get("emotion"):
-               conversation_context.append({
-        "role": "system",
-        "content": f"État émotionnel notable de l'utilisateur : {facts['emotion']}.",
-    })
-
-            if facts.get("habitude"):
-               conversation_context.append({
-        "role": "system",
-        "content": f"Habitude connue de l'utilisateur : {facts['habitude']}.",
-    })
-
-        proactive_hint = build_proactive_hint(message, facts)
-        if proactive_hint:
-            conversation_context.append({
-                "role": "system",
-                "content": proactive_hint,
-            })
-
-            raw_memories = get_recent_memories(user_id, limit=30)
-
-        high_memories = [
-    m for m in raw_memories
-    if m.get("importance") == "high"
-]
-
-        medium_memories = [
-    m for m in raw_memories
-    if m.get("importance") == "medium"
-]
-
-        conversation_memories = [
-    m for m in raw_memories
-    if m.get("role") in ["user", "assistant"]
-    and m.get("message")
-    and m.get("type") == "conversation"
-]
-
-conversation_context = [
-    {"role": "system", "content": SYSTEM_PROMPT}
-]
-
-# Mémoire importante
-for mem in high_memories[-10:]:
-    if mem.get("message"):
-        conversation_context.append({
-            "role": "system",
-            "content": f"Mémoire importante utilisateur : {mem.get('message')}"
-        })
-
-# Mémoire contexte secondaire
-for mem in medium_memories[-5:]:
-    if mem.get("message"):
-        conversation_context.append({
-            "role": "system",
-            "content": f"Contexte utilisateur utile : {mem.get('message')}"
-        })
-
-# Historique conversationnel
-for mem in conversation_memories[-10:]:
-    conversation_context.append({
-        "role": mem.get("role"),
-        "content": mem.get("message"),
-    })
-
-# Historique messages récents
-f   or msg in history:
-if msg.get("role") in ["user", "assistant"] and msg.get("text"):
-        conversation_context.append({
-            "role": msg.get("role"),
-            "content": msg.get("text"),
-        })
-
-# Message utilisateur actuel
-conversation_context.append({
-    "role": "user",
-    "content": message,
-})
-
-# Appel OpenAI
-response = client.responses.create(
-    model="gpt-4.1-mini",
-    input=conversation_context,
-)
-
-answer = response.output_text.strip()
-
-time.sleep(random.uniform(0.4, 1.2))
-
-# Sauvegarde mémoire assistant
-save_memory(user_id, "assistant", answer, "neutre")
-
-            return {
-            "ok": True,
-            "answer": answer
-        }
-
-    except Exception as e:
-        print("ERREUR BACKEND GLOBALE:", e)
-        return {
-            "ok": False,
-            "answer": "",
-            "error": str(e)
-        }
 
 @app.post("/chat-voice")
 async def chat_voice(data: dict):
-
     try:
-
         chat_result = await chat(data)
 
         if not chat_result or not chat_result.get("ok"):
-
             return {
                 "ok": False,
-                "error": (
-                    chat_result.get("error")
-                    if chat_result
-                    else "Chat returned nothing"
-                )
+                "error": chat_result.get("error") if chat_result else "Chat returned nothing"
             }
 
         answer = chat_result.get("answer", "").strip()
 
         if not answer:
-
             return {
                 "ok": False,
                 "error": "No answer generated"
             }
 
-        tmp = tempfile.NamedTemporaryFile(
-            delete=False,
-            suffix=".mp3"
-        )
-
+        tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".mp3")
         tmp_path = tmp.name
         tmp.close()
 
@@ -953,7 +636,6 @@ async def chat_voice(data: dict):
             input=answer,
             response_format="mp3"
         ) as response:
-
             response.stream_to_file(tmp_path)
 
         return FileResponse(
@@ -963,7 +645,6 @@ async def chat_voice(data: dict):
         )
 
     except Exception as e:
-
         print("CHAT VOICE ERROR:", e)
 
         return {
@@ -971,13 +652,17 @@ async def chat_voice(data: dict):
             "error": str(e)
         }
 
+
 @app.post("/tts")
 def tts(data: dict):
     try:
         text = data.get("text", "")
 
         if not text:
-            return {"ok": False, "error": "No text provided"}
+            return {
+                "ok": False,
+                "error": "No text provided"
+            }
 
         tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".mp3")
         tmp_path = tmp.name
@@ -1043,7 +728,10 @@ def mark_proactive_shown(data: dict):
         message_id = data.get("id")
 
         if not message_id:
-            return {"ok": False, "error": "Missing message id"}
+            return {
+                "ok": False,
+                "error": "Missing message id"
+            }
 
         result = (
             supabase.table("proactive_messages")
