@@ -195,10 +195,6 @@ def extract_fact(message: str):
                     "fact_type": fact_type,
                     "value": value,
                 }
-
-    return None
-
-
 def get_user_name(user_id: str):
     try:
         result = (
@@ -215,7 +211,6 @@ def get_user_name(user_id: str):
         print("ERREUR get_user_name:", e)
 
     return None
-
 
 def save_user_name(user_id: str, name: str):
     try:
@@ -435,34 +430,231 @@ def root():
 
 @app.post("/chat")
 async def chat(data: dict):
+
     try:
-        message = data.get("message", "").strip()
-        user_id = data.get("user_id")
-        emotion = "neutre"
 
-        print("USER ID =", user_id)
-        print("MESSAGE =", message)
-
-        if not user_id:
-            return {
-                "ok": False,
-                "answer": "",
-                "error": "Missing user_id"
-            }
-
-        if user_id == "default":
-            return {
-                "ok": False,
-                "answer": "",
-                "error": "Invalid user_id"
-            }
+        user_id = data.get("user_id", "default")
+        message = data.get("message", "")
+        emotion = data.get("emotion", "neutre")
 
         if not message:
             return {
                 "ok": False,
-                "answer": "",
-                "error": "No message provided"
+                "error": "No message"
             }
+
+        normalized_message = normalize_text(message).lower()
+
+        # ========================
+        # Historique messages
+        # ========================
+
+        history_response = (
+            supabase.table("messages")
+            .select("role,text")
+            .eq("user_id", user_id)
+            .order("created_at", desc=True)
+            .limit(12)
+            .execute()
+        )
+
+        history = history_response.data or []
+        history.reverse()
+
+        # ========================
+        # Détection prénom
+        # ========================
+
+        extracted_name = extract_name(message)
+
+        if extracted_name:
+            save_user_name(user_id, extracted_name)
+
+        # ========================
+        # Détection faits
+        # ========================
+
+        extracted_fact = extract_fact(message)
+
+        if extracted_fact and extracted_fact.get("value"):
+            save_structured_fact(
+                user_id,
+                extracted_fact["fact_type"],
+                extracted_fact["value"]
+            )
+
+        # ========================
+        # Profil utilisateur
+        # ========================
+
+        user_name = get_user_name(user_id)
+        facts = get_user_facts(user_id)
+
+        if not user_name and facts.get("name"):
+            user_name = facts.get("name")
+
+        # ========================
+        # Sauvegarde user
+        # ========================
+
+        save_memory(user_id, "user", message, emotion)
+
+        # ========================
+        # Lecture mémoire
+        # ========================
+
+        raw_memories = get_recent_memories(user_id, limit=30)
+
+        high_memories = [
+            m for m in raw_memories
+            if m.get("importance") == "high"
+        ]
+
+        medium_memories = [
+            m for m in raw_memories
+            if m.get("importance") == "medium"
+        ]
+
+        conversation_memories = [
+            m for m in raw_memories
+            if m.get("role") in ["user", "assistant"]
+            and m.get("message")
+            and m.get("type") == "conversation"
+        ]
+
+        # ========================
+        # Construction contexte
+        # ========================
+
+        conversation_context = [
+            {
+                "role": "system",
+                "content": SYSTEM_PROMPT
+            }
+        ]
+
+        # Mémoire importante
+
+        for mem in high_memories[-10:]:
+
+            if mem.get("message"):
+
+                conversation_context.append({
+                    "role": "system",
+                    "content": f"Mémoire importante utilisateur : {mem.get('message')}"
+                })
+
+        # Mémoire secondaire
+
+        for mem in medium_memories[-5:]:
+
+            if mem.get("message"):
+
+                conversation_context.append({
+                    "role": "system",
+                    "content": f"Contexte utilisateur utile : {mem.get('message')}"
+                })
+
+        # Historique conversationnel
+
+        for mem in conversation_memories[-10:]:
+
+            conversation_context.append({
+                "role": mem.get("role"),
+                "content": mem.get("message")
+            })
+
+        # Historique récent DB messages
+
+        for msg in history:
+
+            if (
+                msg.get("role") in ["user", "assistant"]
+                and msg.get("text")
+            ):
+
+                conversation_context.append({
+                    "role": msg.get("role"),
+                    "content": msg.get("text")
+                })
+
+        # Message utilisateur actuel
+
+        conversation_context.append({
+            "role": "user",
+            "content": message
+        })
+
+        # ========================
+        # OpenAI
+        # ========================
+
+        response = client.responses.create(
+            model="gpt-4.1-mini",
+            input=conversation_context,
+        )
+
+        answer = response.output_text.strip()
+
+        time.sleep(random.uniform(0.4, 1.2))
+
+        # ========================
+        # Sauvegarde assistant
+        # ========================
+
+        save_memory(
+            user_id,
+            "assistant",
+            answer,
+            "neutre"
+        )
+
+        return {
+            "ok": True,
+            "answer": answer
+        }
+
+    except Exception as e:
+
+        print("ERREUR BACKEND GLOBALE:", e)
+
+        return {
+            "ok": False,
+            "answer": "",
+            "error": str(e)
+        }
+
+
+# ========================
+# CHAT VOICE
+# ========================
+
+@app.post("/chat")
+
+async def chat(data: dict):
+
+    try:
+
+        # ton code
+        # memories
+        # openai
+        # answer
+
+        save_memory(user_id, "assistant", answer, "neutre")
+
+        return {
+            "ok": True,
+            "answer": answer
+        }
+
+    except Exception as e:
+        print("ERREUR BACKEND GLOBALE:", e)
+
+        return {
+            "ok": False,
+            "answer": "",
+            "error": str(e)
+        }
 
         normalized_message = normalize_text(message).lower()
         
@@ -634,58 +826,80 @@ async def chat(data: dict):
                 "content": proactive_hint,
             })
 
+            raw_memories = get_recent_memories(user_id, limit=30)
+
         high_memories = [
-        m for m in raw_memories
-        if m.get("importance") == "high"
-        
-        ]
+    m for m in raw_memories
+    if m.get("importance") == "high"
+]
 
         medium_memories = [
-        m for m in raw_memories
-        if m.get("importance") == "medium"
-    
-        ]
+    m for m in raw_memories
+    if m.get("importance") == "medium"
+]
 
         conversation_memories = [
-        m for m in raw_memories
-        if m.get("role") in ["user", "assistant"]
-        and m.get("message")
-        and m.get("type") == "conversation"
-        
-        ]
+    m for m in raw_memories
+    if m.get("role") in ["user", "assistant"]
+    and m.get("message")
+    and m.get("type") == "conversation"
+]
 
-        for mem in conversation_memories[-10:]:
-            conversation_context.append({
-                "role": mem.get("role"),
-                "content": mem.get("message"),
-            })
-        for msg in history:
-            if msg.get("role") in ["user", "assistant"] and msg.get("text"):
+conversation_context = [
+    {"role": "system", "content": SYSTEM_PROMPT}
+]
 
-             conversation_context.append({
+# Mémoire importante
+for mem in high_memories[-10:]:
+    if mem.get("message"):
+        conversation_context.append({
+            "role": "system",
+            "content": f"Mémoire importante utilisateur : {mem.get('message')}"
+        })
+
+# Mémoire contexte secondaire
+for mem in medium_memories[-5:]:
+    if mem.get("message"):
+        conversation_context.append({
+            "role": "system",
+            "content": f"Contexte utilisateur utile : {mem.get('message')}"
+        })
+
+# Historique conversationnel
+for mem in conversation_memories[-10:]:
+    conversation_context.append({
+        "role": mem.get("role"),
+        "content": mem.get("message"),
+    })
+
+# Historique messages récents
+f   or msg in history:
+if msg.get("role") in ["user", "assistant"] and msg.get("text"):
+        conversation_context.append({
             "role": msg.get("role"),
             "content": msg.get("text"),
         })
-        
-        # 7) Appel OpenAI
-        conversation_context.append({
-            "role": "user",
-            "content": message,
 
-        
-        })
-        response = client.responses.create(
-            model="gpt-4.1-mini",
-            input=conversation_context,
-        )
+# Message utilisateur actuel
+conversation_context.append({
+    "role": "user",
+    "content": message,
+})
 
-        answer = response.output_text.strip() 
-        time.sleep(random.uniform(0.4, 1.2))
+# Appel OpenAI
+response = client.responses.create(
+    model="gpt-4.1-mini",
+    input=conversation_context,
+)
 
-        # 8) Sauvegarde réponse assistant
-        save_memory(user_id, "assistant", answer, "neutre")
+answer = response.output_text.strip()
 
-        return {
+time.sleep(random.uniform(0.4, 1.2))
+
+# Sauvegarde mémoire assistant
+save_memory(user_id, "assistant", answer, "neutre")
+
+            return {
             "ok": True,
             "answer": answer
         }
@@ -698,27 +912,38 @@ async def chat(data: dict):
             "error": str(e)
         }
 
-
 @app.post("/chat-voice")
 async def chat_voice(data: dict):
+
     try:
+
         chat_result = await chat(data)
 
         if not chat_result or not chat_result.get("ok"):
+
             return {
                 "ok": False,
-                "error": chat_result.get("error") if chat_result else "Chat returned nothing"
+                "error": (
+                    chat_result.get("error")
+                    if chat_result
+                    else "Chat returned nothing"
+                )
             }
 
         answer = chat_result.get("answer", "").strip()
 
         if not answer:
+
             return {
                 "ok": False,
                 "error": "No answer generated"
             }
 
-        tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".mp3")
+        tmp = tempfile.NamedTemporaryFile(
+            delete=False,
+            suffix=".mp3"
+        )
+
         tmp_path = tmp.name
         tmp.close()
 
@@ -728,9 +953,8 @@ async def chat_voice(data: dict):
             input=answer,
             response_format="mp3"
         ) as response:
-            response.stream_to_file(tmp_path)
 
-        print("CHAT VOICE SIZE:", os.path.getsize(tmp_path))
+            response.stream_to_file(tmp_path)
 
         return FileResponse(
             tmp_path,
@@ -739,12 +963,13 @@ async def chat_voice(data: dict):
         )
 
     except Exception as e:
+
         print("CHAT VOICE ERROR:", e)
+
         return {
             "ok": False,
             "error": str(e)
         }
-
 
 @app.post("/tts")
 def tts(data: dict):
