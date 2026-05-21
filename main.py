@@ -441,11 +441,11 @@ async def chat(data: dict):
         message = data.get("message", "")
         emotion = data.get("emotion", "neutre")
 
-        if not message:
+        if not message or len(message.strip())<2:
             return {
-                "ok": False,
+                "ok": True,
                 "answer": "",
-                "error": "No message"
+                "answer": "I didn't catch that? Can you repeat?"
             }
 
         normalized_message = normalize_text(message).lower()
@@ -620,21 +620,15 @@ async def chat(data: dict):
 @app.post("/chat-voice")
 async def chat_voice(data: dict):
     try:
-        chat_result = await chat(data)
+        text = (
+            data.get("message")
+            or data.get("text")
+            or data.get("answer")
+            or ""
+        ).strip()
 
-        if not chat_result or not chat_result.get("ok"):
-            return {
-                "ok": False,
-                "error": chat_result.get("error") if chat_result else "Chat returned nothing"
-            }
-
-        answer = chat_result.get("answer", "").strip()
-
-        if not answer:
-            return {
-                "ok": False,
-                "error": "No answer generated"
-            }
+        if not text:
+            text = "I didn’t catch that. Can you repeat?"
 
         tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".mp3")
         tmp_path = tmp.name
@@ -643,7 +637,7 @@ async def chat_voice(data: dict):
         with client.audio.speech.with_streaming_response.create(
             model="gpt-4o-mini-tts",
             voice="alloy",
-            input=answer,
+            input=text,
             response_format="mp3"
         ) as response:
             response.stream_to_file(tmp_path)
@@ -659,10 +653,10 @@ async def chat_voice(data: dict):
 
         return {
             "ok": False,
-            "error": str(e)
+            "error": str(e),
+            "answer": "KOÉ is having trouble speaking right now."
         }
-
-
+    
 @app.post("/tts")
 def tts(data: dict):
     try:
