@@ -10,6 +10,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, Response
 from supabase import create_client
 from openai import OpenAI
+from fastapi import UploadFile, File, Form
+import json
 
 
 SUPABASE_URL = "https://zxuysoqknkzjmpftqupl.supabase.co"
@@ -655,6 +657,70 @@ async def chat_voice(data: dict):
             "ok": False,
             "error": str(e),
             "answer": "KOÉ is having trouble speaking right now."
+        }
+@app.post("/voice-message")
+async def voice_message(
+    audio: UploadFile = File(...),
+    user_id: str = Form("default")
+):
+    try:
+        suffix = os.path.splitext(audio.filename or "")[-1] or ".webm"
+
+        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+            tmp.write(await audio.read())
+            audio_path = tmp.name
+
+        with open(audio_path, "rb") as audio_file:
+            transcript = client.audio.transcriptions.create(
+                model="gpt-4o-mini-transcribe",
+                file=audio_file,
+                language="fr"
+            )
+
+        text = (transcript.text or "").strip()
+
+        if not text:
+            text = "I didn’t catch that. Can you repeat?"
+
+        chat_result = await chat({
+            "message": text,
+            "user_id": user_id,
+            "emotion": "neutre"
+        })
+
+        answer = chat_result.get("answer", "").strip()
+
+        if not answer:
+            answer = "I’m here, but I had trouble responding clearly."
+
+        tmp_audio = tempfile.NamedTemporaryFile(delete=False, suffix=".mp3")
+        tmp_audio_path = tmp_audio.name
+        tmp_audio.close()
+
+        with client.audio.speech.with_streaming_response.create(
+            model="gpt-4o-mini-tts",
+            voice="alloy",
+            input=answer,
+            response_format="mp3"
+        ) as response:
+            response.stream_to_file(tmp_audio_path)
+
+        return FileResponse(
+            tmp_audio_path,
+            media_type="audio/mpeg",
+            headers={
+                "X-KOE-Transcript": text,
+                "X-KOE-Answer": answer,
+            },
+            filename="koe-response.mp3"
+        )
+
+    except Exception as e:
+        print("VOICE MESSAGE ERROR:", e)
+        return {
+            "ok": False,
+            "error": str(e),
+            "answer": "KOÉ is having trouble processing your voice right now."
         }
     
 @app.post("/tts")
