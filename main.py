@@ -5,13 +5,11 @@ import time
 import random
 from datetime import datetime, timezone
 
-from fastapi import FastAPI
+from fastapi import FastAPI, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, Response
 from supabase import create_client
 from openai import OpenAI
-from fastapi import UploadFile, File, Form
-import json
 
 
 SUPABASE_URL = "https://zxuysoqknkzjmpftqupl.supabase.co"
@@ -29,6 +27,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
 SYSTEM_PROMPT = """
 Tu es KOÉ.
 
@@ -69,8 +68,9 @@ Règle importante :
 la conversation doit toujours pouvoir continuer naturellement.
 """
 
+
 def normalize_text(text: str) -> str:
-    return text.replace("\\'", "'").replace("\\", "").strip()
+    return (text or "").replace("\\'", "'").replace("\\", "").strip()
 
 
 def now_utc_iso() -> str:
@@ -88,11 +88,24 @@ def parse_iso_date(value: str):
         return None
 
 
+def get_memory_importance(memory_type, emotion="neutre"):
+    if memory_type in ["name", "identity", "objectif", "projet", "travail", "relation", "emotion"]:
+        return "high"
+
+    if memory_type in ["preference", "habitude"]:
+        return "medium"
+
+    if memory_type == "conversation":
+        return "low"
+
+    return "medium"
+
+
 def get_recent_memories(user_id: str, limit=12):
     try:
         result = (
             supabase.table("memories")
-            .select("content,created_at,type,importance")
+            .select("role,message,created_at,type,importance")
             .eq("user_id", user_id)
             .order("created_at", desc=True)
             .limit(limit)
@@ -108,32 +121,18 @@ def get_recent_memories(user_id: str, limit=12):
         return []
 
 
-def get_memory_importance(memory_type, emotion="neutre"):
-    if memory_type in ["name", "identity"]:
-        return "high"
-
-    if memory_type in ["objectif", "projet", "travail", "relation"]:
-        return "high"
-
-    if memory_type == "emotion":
-        return "high"
-
-    if memory_type in ["preference", "habitude"]:
-        return "medium"
-
-    if memory_type == "conversation":
-        return "low"
-
-    return "medium"
-
-
-def save_memory(user_id, content, emotion="neutre", memory_type="conversation"):
+def save_memory(user_id, role, message, emotion="neutre", memory_type="conversation"):
     try:
+        message = normalize_text(message)
+
+        if not message:
+            return
+
         existing = (
             supabase.table("memories")
             .select("*")
             .eq("user_id", user_id)
-            .eq("content", content)
+            .eq("message", message)
             .eq("type", memory_type)
             .execute()
         )
@@ -143,15 +142,16 @@ def save_memory(user_id, content, emotion="neutre", memory_type="conversation"):
 
         supabase.table("memories").insert({
             "user_id": user_id,
-            "content": content,
+            "message": message,
             "emotion": emotion,
+            "role": role,
             "type": memory_type,
             "importance": get_memory_importance(memory_type, emotion),
-            "last_used_at": now_utc_iso(),
         }).execute()
 
     except Exception as e:
         print("MEMORY SAVE ERROR:", e)
+
 
 def extract_name(message: str):
     cleaned = normalize_text(message)
@@ -194,7 +194,7 @@ def extract_fact(message: str):
     for pattern, fact_type in patterns:
         match = re.search(pattern, lowered, re.IGNORECASE)
         if match:
-            value = match.group(1).strip() if match.group(1) else ""
+            value = match.group(1).strip() if match.group(1) else cleaned
             if value:
                 return {
                     "fact_type": fact_type,
@@ -232,15 +232,15 @@ def save_user_name(user_id: str, name: str):
 
         existing_name_fact = (
             supabase.table("memories")
-            .select("content")
+            .select("message")
             .eq("user_id", user_id)
             .eq("type", "name")
-            .eq("content", name)
+            .eq("message", name)
             .execute()
         )
 
         if not existing_name_fact.data:
-            save_memory(user_id, name, "neutre", "name")
+            save_memory(user_id, "system", name, "neutre", "name")
 
     except Exception as e:
         print("ERREUR save_user_name:", e)
@@ -252,7 +252,7 @@ def get_user_facts(user_id: str) -> dict:
     try:
         result = (
             supabase.table("memories")
-            .select("content,type")
+            .select("message,type")
             .eq("user_id", user_id)
             .in_("type", [
                 "name",
@@ -272,7 +272,8 @@ def get_user_facts(user_id: str) -> dict:
 
         for row in rows:
             t = row.get("type")
-            v = row.get("content")
+            v = row.get("message")
+
             if t and v:
                 facts[t] = v
 
@@ -286,15 +287,15 @@ def save_structured_fact(user_id: str, fact_type: str, fact_value: str):
     try:
         existing_fact = (
             supabase.table("memories")
-            .select("content")
+            .select("message")
             .eq("user_id", user_id)
             .eq("type", fact_type)
-            .eq("content", fact_value)
+            .eq("message", fact_value)
             .execute()
         )
 
         if not existing_fact.data:
-           save_memory(user_id, fact_value, "neutre", fact_type)
+            save_memory(user_id, "system", fact_value, "neutre", fact_type)
 
     except Exception as e:
         print("ERREUR save_structured_fact:", e)
@@ -449,11 +450,10 @@ async def chat(data: dict):
         message = data.get("message", "")
         emotion = data.get("emotion", "neutre")
 
-        if not message or len(message.strip())<2:
+        if not message or len(message.strip()) < 2:
             return {
                 "ok": True,
-                "answer": "",
-                "answer": "I didn't catch that? Can you repeat?"
+                "answer": "Je n’ai pas bien entendu. Tu peux répéter ?"
             }
 
         normalized_message = normalize_text(message).lower()
@@ -478,7 +478,7 @@ async def chat(data: dict):
         if not user_name and facts.get("name"):
             user_name = facts.get("name")
 
-        save_memory(user_id, message, emotion, "conversation")
+        save_memory(user_id, "user", message, emotion)
 
         if (
             "comment je m'appelle" in normalized_message
@@ -490,7 +490,8 @@ async def chat(data: dict):
             else:
                 answer = "Je ne connais pas encore ton prénom."
 
-            save_memory(user_id, answer, "neutre", "conversation")
+            save_memory(user_id, "assistant", answer, "neutre")
+
             return {
                 "ok": True,
                 "answer": answer
@@ -502,7 +503,8 @@ async def chat(data: dict):
             else:
                 answer = "Je ne connais pas encore ton objectif."
 
-            save_memory(user_id, answer, "neutre", "conversation")
+            save_memory(user_id, "assistant", answer, "neutre")
+
             return {
                 "ok": True,
                 "answer": answer
@@ -533,12 +535,13 @@ async def chat(data: dict):
         ]
 
         conversation_memories = [
-    m for m in raw_memories
-    if (
-        m.get("content")
-        and m.get("type") == "conversation"
-    )
-]
+            m for m in raw_memories
+            if (
+                m.get("role") in ["user", "assistant"]
+                and m.get("message")
+                and m.get("type") == "conversation"
+            )
+        ]
 
         conversation_context = [
             {
@@ -554,23 +557,23 @@ async def chat(data: dict):
             })
 
         for mem in high_memories[-10:]:
-            if mem.get("content"):
+            if mem.get("message"):
                 conversation_context.append({
                     "role": "system",
-                    "content": f"Mémoire importante utilisateur : {mem.get('content')}"
+                    "content": f"Mémoire importante utilisateur : {mem.get('message')}"
                 })
 
         for mem in medium_memories[-5:]:
-            if mem.get("content"):                
+            if mem.get("message"):
                 conversation_context.append({
                     "role": "system",
-                    "content": f"Mémoire importante utilisateur : {mem.get('content')}"
+                    "content": f"Contexte utilisateur utile : {mem.get('message')}"
                 })
 
         for mem in conversation_memories[-10:]:
             conversation_context.append({
                 "role": mem.get("role"),
-                "content": mem.get("content")
+                "content": mem.get("message")
             })
 
         for msg in history:
@@ -605,7 +608,8 @@ async def chat(data: dict):
 
         time.sleep(random.uniform(0.4, 1.2))
 
-        save_memory(user_id, answer, "neutre", "conversation")
+        save_memory(user_id, "assistant", answer, "neutre")
+
         return {
             "ok": True,
             "answer": answer
@@ -632,7 +636,7 @@ async def chat_voice(data: dict):
         ).strip()
 
         if not text:
-            text = "I didn’t catch that. Can you repeat?"
+            text = "Je n’ai pas bien entendu. Tu peux répéter ?"
 
         tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".mp3")
         tmp_path = tmp.name
@@ -658,59 +662,26 @@ async def chat_voice(data: dict):
         return {
             "ok": False,
             "error": str(e),
-            "answer": "KOÉ is having trouble speaking right now."
+            "answer": "KOÉ rencontre un problème pour parler maintenant."
         }
+
+
 @app.post("/voice-message")
 async def voice_message(
     audio: UploadFile = File(...),
     user_id: str = Form("default")
 ):
     try:
-        print("VOICE MESSAGE RECEIVED")
-        print("FILENAME:", audio.filename)
-        print("CONTENT TYPE:", audio.content_type)
-        print("USER ID:", user_id)
-
         suffix = os.path.splitext(audio.filename or "")[-1] or ".webm"
-
         audio_bytes = await audio.read()
 
-        print("AUDIO SIZE:", len(audio_bytes))
-
         if not audio_bytes or len(audio_bytes) < 1000:
-            print("AUDIO TOO SMALL OR EMPTY")
-
-            fallback_text = "I didn’t catch that. Can you repeat?"
-
-            tmp_audio = tempfile.NamedTemporaryFile(delete=False, suffix=".mp3")
-            tmp_audio_path = tmp_audio.name
-            tmp_audio.close()
-
-            with client.audio.speech.with_streaming_response.create(
-                model="gpt-4o-mini-tts",
-                voice="alloy",
-                input=fallback_text,
-                response_format="mp3"
-            ) as response:
-                response.stream_to_file(tmp_audio_path)
-
-            return FileResponse(
-                tmp_audio_path,
-                media_type="audio/mpeg",
-                headers={
-                    "X-KOE-Transcript": "",
-                    "X-KOE-Answer": fallback_text,
-                    "X-KOE-Error": "audio_empty"
-                },
-                filename="koe-response.mp3"
-            )
+            fallback_text = "Je n’ai pas bien entendu. Tu peux répéter ?"
+            return await generate_voice_response(fallback_text, "", fallback_text, "audio_empty")
 
         with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
             tmp.write(audio_bytes)
             audio_path = tmp.name
-
-        print("AUDIO SAVED:", audio_path)
-        print("START TRANSCRIPTION")
 
         with open(audio_path, "rb") as audio_file:
             transcript = client.audio.transcriptions.create(
@@ -719,16 +690,10 @@ async def voice_message(
                 language="fr"
             )
 
-        print("TRANSCRIPTION RAW:", transcript)
-
         text = (getattr(transcript, "text", "") or "").strip()
 
-        print("TRANSCRIPTION TEXT:", text)
-
         if not text:
-            text = "I didn’t catch that. Can you repeat?"
-
-        print("START CHAT WITH TEXT:", text)
+            text = "Je n’ai pas bien entendu. Tu peux répéter ?"
 
         chat_result = await chat({
             "message": text,
@@ -736,16 +701,21 @@ async def voice_message(
             "emotion": "neutre"
         })
 
-        print("CHAT RESULT:", chat_result)
-
         answer = (chat_result.get("answer", "") if chat_result else "").strip()
 
         if not answer:
-            answer = "I’m here, but I had trouble responding clearly."
+            answer = "Je suis là, mais j’ai eu du mal à répondre clairement."
 
-        print("FINAL ANSWER:", answer)
-        print("START TTS")
+        return await generate_voice_response(answer, text, answer)
 
+    except Exception as e:
+        print("VOICE MESSAGE ERROR:", e)
+        fallback_text = "KOÉ rencontre un problème pour traiter ta voix maintenant."
+        return await generate_voice_response(fallback_text, "", fallback_text, str(e))
+
+
+async def generate_voice_response(answer: str, transcript: str = "", header_answer: str = "", error: str = ""):
+    try:
         tmp_audio = tempfile.NamedTemporaryFile(delete=False, suffix=".mp3")
         tmp_audio_path = tmp_audio.name
         tmp_audio.close()
@@ -758,56 +728,30 @@ async def voice_message(
         ) as response:
             response.stream_to_file(tmp_audio_path)
 
-        print("TTS FILE READY:", tmp_audio_path)
+        headers = {
+            "X-KOE-Transcript": transcript,
+            "X-KOE-Answer": header_answer or answer,
+        }
+
+        if error:
+            headers["X-KOE-Error"] = error
 
         return FileResponse(
             tmp_audio_path,
             media_type="audio/mpeg",
-            headers={
-                "X-KOE-Transcript": text,
-                "X-KOE-Answer": answer,
-            },
+            headers=headers,
             filename="koe-response.mp3"
         )
 
-    except Exception as e:
-        print("VOICE MESSAGE ERROR:", e)
+    except Exception as tts_error:
+        print("VOICE RESPONSE TTS ERROR:", tts_error)
+        return {
+            "ok": False,
+            "error": str(tts_error),
+            "answer": answer
+        }
 
-        fallback_text = "KOÉ is having trouble processing your voice right now."
 
-        try:
-            tmp_audio = tempfile.NamedTemporaryFile(delete=False, suffix=".mp3")
-            tmp_audio_path = tmp_audio.name
-            tmp_audio.close()
-
-            with client.audio.speech.with_streaming_response.create(
-                model="gpt-4o-mini-tts",
-                voice="alloy",
-                input=fallback_text,
-                response_format="mp3"
-            ) as response:
-                response.stream_to_file(tmp_audio_path)
-
-            return FileResponse(
-                tmp_audio_path,
-                media_type="audio/mpeg",
-                headers={
-                    "X-KOE-Transcript": "",
-                    "X-KOE-Answer": fallback_text,
-                    "X-KOE-Error": str(e)
-                },
-                filename="koe-response.mp3"
-            )
-
-        except Exception as tts_error:
-            print("VOICE FALLBACK TTS ERROR:", tts_error)
-
-            return {
-                "ok": False,
-                "error": str(e),
-                "answer": fallback_text
-            }
-    
 @app.post("/tts")
 def tts(data: dict):
     try:
