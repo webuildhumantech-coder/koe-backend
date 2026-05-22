@@ -92,7 +92,7 @@ def get_recent_memories(user_id: str, limit=12):
     try:
         result = (
             supabase.table("memories")
-            .select("role,message,created_at,type,importance")
+            .select("content,created_at,type,importance")
             .eq("user_id", user_id)
             .order("created_at", desc=True)
             .limit(limit)
@@ -127,13 +127,13 @@ def get_memory_importance(memory_type, emotion="neutre"):
     return "medium"
 
 
-def save_memory(user_id, role, message, emotion="neutre", memory_type="conversation"):
+def save_memory(user_id, content, emotion="neutre", memory_type="conversation"):
     try:
         existing = (
             supabase.table("memories")
             .select("*")
             .eq("user_id", user_id)
-            .eq("message", message)
+            .eq("content", content)
             .eq("type", memory_type)
             .execute()
         )
@@ -143,16 +143,15 @@ def save_memory(user_id, role, message, emotion="neutre", memory_type="conversat
 
         supabase.table("memories").insert({
             "user_id": user_id,
-            "message": message,
+            "content": content,
             "emotion": emotion,
-            "role": role,
             "type": memory_type,
             "importance": get_memory_importance(memory_type, emotion),
+            "last_used_at": now_utc_iso(),
         }).execute()
 
     except Exception as e:
         print("MEMORY SAVE ERROR:", e)
-
 
 def extract_name(message: str):
     cleaned = normalize_text(message)
@@ -233,15 +232,15 @@ def save_user_name(user_id: str, name: str):
 
         existing_name_fact = (
             supabase.table("memories")
-            .select("message")
+            .select("content")
             .eq("user_id", user_id)
             .eq("type", "name")
-            .eq("message", name)
+            .eq("content", name)
             .execute()
         )
 
         if not existing_name_fact.data:
-            save_memory(user_id, "system", name, "neutre", "name")
+            save_memory(user_id, name, "neutre", "name")
 
     except Exception as e:
         print("ERREUR save_user_name:", e)
@@ -253,7 +252,7 @@ def get_user_facts(user_id: str) -> dict:
     try:
         result = (
             supabase.table("memories")
-            .select("message,type")
+            .select("content,type")
             .eq("user_id", user_id)
             .in_("type", [
                 "name",
@@ -273,8 +272,7 @@ def get_user_facts(user_id: str) -> dict:
 
         for row in rows:
             t = row.get("type")
-            v = row.get("message")
-
+            v = row.get("content")
             if t and v:
                 facts[t] = v
 
@@ -288,15 +286,15 @@ def save_structured_fact(user_id: str, fact_type: str, fact_value: str):
     try:
         existing_fact = (
             supabase.table("memories")
-            .select("message")
+            .select("content")
             .eq("user_id", user_id)
             .eq("type", fact_type)
-            .eq("message", fact_value)
+            .eq("content", fact_value)
             .execute()
         )
 
         if not existing_fact.data:
-            save_memory(user_id, "system", fact_value, "neutre", fact_type)
+           save_memory(user_id, fact_value, "neutre", fact_type)
 
     except Exception as e:
         print("ERREUR save_structured_fact:", e)
@@ -480,7 +478,7 @@ async def chat(data: dict):
         if not user_name and facts.get("name"):
             user_name = facts.get("name")
 
-        save_memory(user_id, "user", message, emotion)
+        save_memory(user_id, message, emotion, "conversation")
 
         if (
             "comment je m'appelle" in normalized_message
@@ -492,8 +490,7 @@ async def chat(data: dict):
             else:
                 answer = "Je ne connais pas encore ton prénom."
 
-            save_memory(user_id, "assistant", answer, "neutre")
-
+            save_memory(user_id, answer, "neutre", "conversation")
             return {
                 "ok": True,
                 "answer": answer
@@ -505,8 +502,7 @@ async def chat(data: dict):
             else:
                 answer = "Je ne connais pas encore ton objectif."
 
-            save_memory(user_id, "assistant", answer, "neutre")
-
+            save_memory(user_id, answer, "neutre", "conversation")
             return {
                 "ok": True,
                 "answer": answer
@@ -537,13 +533,12 @@ async def chat(data: dict):
         ]
 
         conversation_memories = [
-            m for m in raw_memories
-            if (
-                m.get("role") in ["user", "assistant"]
-                and m.get("message")
-                and m.get("type") == "conversation"
-            )
-        ]
+    m for m in raw_memories
+    if (
+        m.get("content")
+        and m.get("type") == "conversation"
+    )
+]
 
         conversation_context = [
             {
@@ -559,23 +554,23 @@ async def chat(data: dict):
             })
 
         for mem in high_memories[-10:]:
-            if mem.get("message"):
+            if mem.get("content"):
                 conversation_context.append({
                     "role": "system",
-                    "content": f"Mémoire importante utilisateur : {mem.get('message')}"
+                    "content": f"Mémoire importante utilisateur : {mem.get('content')}"
                 })
 
         for mem in medium_memories[-5:]:
-            if mem.get("message"):
+            if mem.get("content"):                
                 conversation_context.append({
                     "role": "system",
-                    "content": f"Contexte utilisateur utile : {mem.get('message')}"
+                    "content": f"Mémoire importante utilisateur : {mem.get('content')}"
                 })
 
         for mem in conversation_memories[-10:]:
             conversation_context.append({
                 "role": mem.get("role"),
-                "content": mem.get("message")
+                "content": mem.get("content")
             })
 
         for msg in history:
@@ -610,8 +605,7 @@ async def chat(data: dict):
 
         time.sleep(random.uniform(0.4, 1.2))
 
-        save_memory(user_id, "assistant", answer, "neutre")
-
+        save_memory(user_id, answer, "neutre", "conversation")
         return {
             "ok": True,
             "answer": answer
