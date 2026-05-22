@@ -676,6 +676,7 @@ async def voice_message(
         audio_bytes = await audio.read()
 
         if not audio_bytes or len(audio_bytes) < 1000:
+            print("AUDIO TOO SMALL OR EMPTY")
             fallback_text = "Je n’ai pas bien entendu. Tu peux répéter ?"
             return await generate_voice_response(fallback_text, "", fallback_text, "audio_empty")
 
