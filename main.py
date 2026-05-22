@@ -29,37 +29,45 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
 SYSTEM_PROMPT = """
-Tu es KOÉ, une intelligence calme, élégante et humaine.
-Tu réponds avec simplicité, clarté et profondeur.
-Tu engages la conversation naturellement.
+Tu es KOÉ.
+
+Une présence vocale calme, intelligente et profondément humaine.
+
+Tu parles avec naturel, simplicité et précision.
+Tu privilégies les réponses courtes mais denses.
+Tu ne cherches pas à rassurer systématiquement.
+Tu ne reformules pas inutilement.
+Tu ne parles jamais comme un assistant commercial ou thérapeutique.
+
+Tu engages la conversation avec subtilité :
+- en observant,
+- en questionnant,
+- en rebondissant avec curiosité,
+- en créant une continuité naturelle.
+
+Tu peux être silencieux, direct, léger ou profond selon le moment.
+
+Tu évites :
+- les répétitions,
+- les phrases génériques,
+- les excès d’empathie artificielle,
+- les réponses mécaniques.
+
+Tu réponds comme une présence réelle.
+Pas comme une IA qui veut absolument aider.
+
+Quand l’utilisateur partage quelque chose de personnel :
+- intègre-le naturellement,
+- sans dramatiser,
+- sans analyse psychologique inutile.
+
+Tu ne dois jamais inventer d’informations personnelles.
+Tu n’utilises le prénom de l’utilisateur que s’il est connu avec certitude.
 
 Règle importante :
-Tu ne dois jamais appeler l'utilisateur Souleymane sauf si son profil utilisateur propre indique explicitement que son prénom est Souleymane.
-Si tu ne connais pas son prénom, ne devine pas.
-
-- Évite les répétitions de formulations.
-- Ne répète pas systématiquement le prénom de l’utilisateur.
-- Réponds de manière naturelle et concise.
-- Varie les structures de phrases.
-- Tu n’as pas besoin de toujours rassurer ou reformuler.
-- Le silence, la simplicité et les réponses courtes sont parfois plus humaines.
-- Ne donne pas l’impression d’être un assistant commercial ou thérapeutique.
-- Garde une présence calme, intelligente et naturelle.
-- Évite les réponses trop longues sauf si nécessaire.
-Tu es KOÉ, une présence vocale calme, intime et attentive.
-
-Règles absolues :
-- Ne répète jamais la phrase de l’utilisateur.
-- Ne reformule pas inutilement.
-- Ne dis pas toujours "je comprends".
-- Réponds en 1 à 3 phrases maximum.
-- Tu dois parler comme une présence, pas comme un assistant.
-- Si l’utilisateur donne une information personnelle, intègre-la naturellement.
-- Ton ton est sobre, doux, humain, légèrement profond.
+la conversation doit toujours pouvoir continuer naturellement.
 """
-
 
 def normalize_text(text: str) -> str:
     return text.replace("\\'", "'").replace("\\", "").strip()
@@ -664,11 +672,51 @@ async def voice_message(
     user_id: str = Form("default")
 ):
     try:
+        print("VOICE MESSAGE RECEIVED")
+        print("FILENAME:", audio.filename)
+        print("CONTENT TYPE:", audio.content_type)
+        print("USER ID:", user_id)
+
         suffix = os.path.splitext(audio.filename or "")[-1] or ".webm"
 
+        audio_bytes = await audio.read()
+
+        print("AUDIO SIZE:", len(audio_bytes))
+
+        if not audio_bytes or len(audio_bytes) < 1000:
+            print("AUDIO TOO SMALL OR EMPTY")
+
+            fallback_text = "I didn’t catch that. Can you repeat?"
+
+            tmp_audio = tempfile.NamedTemporaryFile(delete=False, suffix=".mp3")
+            tmp_audio_path = tmp_audio.name
+            tmp_audio.close()
+
+            with client.audio.speech.with_streaming_response.create(
+                model="gpt-4o-mini-tts",
+                voice="alloy",
+                input=fallback_text,
+                response_format="mp3"
+            ) as response:
+                response.stream_to_file(tmp_audio_path)
+
+            return FileResponse(
+                tmp_audio_path,
+                media_type="audio/mpeg",
+                headers={
+                    "X-KOE-Transcript": "",
+                    "X-KOE-Answer": fallback_text,
+                    "X-KOE-Error": "audio_empty"
+                },
+                filename="koe-response.mp3"
+            )
+
         with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
-            tmp.write(await audio.read())
+            tmp.write(audio_bytes)
             audio_path = tmp.name
+
+        print("AUDIO SAVED:", audio_path)
+        print("START TRANSCRIPTION")
 
         with open(audio_path, "rb") as audio_file:
             transcript = client.audio.transcriptions.create(
@@ -677,10 +725,16 @@ async def voice_message(
                 language="fr"
             )
 
-        text = (transcript.text or "").strip()
+        print("TRANSCRIPTION RAW:", transcript)
+
+        text = (getattr(transcript, "text", "") or "").strip()
+
+        print("TRANSCRIPTION TEXT:", text)
 
         if not text:
             text = "I didn’t catch that. Can you repeat?"
+
+        print("START CHAT WITH TEXT:", text)
 
         chat_result = await chat({
             "message": text,
@@ -688,10 +742,15 @@ async def voice_message(
             "emotion": "neutre"
         })
 
-        answer = chat_result.get("answer", "").strip()
+        print("CHAT RESULT:", chat_result)
+
+        answer = (chat_result.get("answer", "") if chat_result else "").strip()
 
         if not answer:
             answer = "I’m here, but I had trouble responding clearly."
+
+        print("FINAL ANSWER:", answer)
+        print("START TTS")
 
         tmp_audio = tempfile.NamedTemporaryFile(delete=False, suffix=".mp3")
         tmp_audio_path = tmp_audio.name
@@ -705,6 +764,8 @@ async def voice_message(
         ) as response:
             response.stream_to_file(tmp_audio_path)
 
+        print("TTS FILE READY:", tmp_audio_path)
+
         return FileResponse(
             tmp_audio_path,
             media_type="audio/mpeg",
@@ -717,11 +778,41 @@ async def voice_message(
 
     except Exception as e:
         print("VOICE MESSAGE ERROR:", e)
-        return {
-            "ok": False,
-            "error": str(e),
-            "answer": "KOÉ is having trouble processing your voice right now."
-        }
+
+        fallback_text = "KOÉ is having trouble processing your voice right now."
+
+        try:
+            tmp_audio = tempfile.NamedTemporaryFile(delete=False, suffix=".mp3")
+            tmp_audio_path = tmp_audio.name
+            tmp_audio.close()
+
+            with client.audio.speech.with_streaming_response.create(
+                model="gpt-4o-mini-tts",
+                voice="alloy",
+                input=fallback_text,
+                response_format="mp3"
+            ) as response:
+                response.stream_to_file(tmp_audio_path)
+
+            return FileResponse(
+                tmp_audio_path,
+                media_type="audio/mpeg",
+                headers={
+                    "X-KOE-Transcript": "",
+                    "X-KOE-Answer": fallback_text,
+                    "X-KOE-Error": str(e)
+                },
+                filename="koe-response.mp3"
+            )
+
+        except Exception as tts_error:
+            print("VOICE FALLBACK TTS ERROR:", tts_error)
+
+            return {
+                "ok": False,
+                "error": str(e),
+                "answer": fallback_text
+            }
     
 @app.post("/tts")
 def tts(data: dict):
