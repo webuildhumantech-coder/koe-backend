@@ -10,6 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, Response
 from supabase import create_client
 from openai import OpenAI
+import requests
 
 
 SUPABASE_URL = "https://zxuysoqknkzjmpftqupl.supabase.co"
@@ -17,6 +18,8 @@ SUPABASE_KEY = "sb_publishable_rrh5vevB5bc5E1xauwOaPw_EyG3xSW8"
 
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+ELEVENLABS_API_KEY = os.getenv("ELEVENLABS_API_KEY")
+ELEVENLABS_VOICE_ID = "tJvgmaVM5tDwPVrtn8TA"
 
 app = FastAPI()
 
@@ -642,13 +645,32 @@ async def chat_voice(data: dict):
         tmp_path = tmp.name
         tmp.close()
 
-        with client.audio.speech.with_streaming_response.create(
-            model="gpt-4o-mini-tts",
-            voice="alloy",
-            input=text,
-            response_format="mp3"
-        ) as response:
-            response.stream_to_file(tmp_path)
+        url = f"https://api.elevenlabs.io/v1/text-to-speech/{ELEVENLABS_VOICE_ID}"
+
+        headers = {
+            "xi-api-key": ELEVENLABS_API_KEY,
+            "Content-Type": "application/json",
+            "Accept": "audio/mpeg",
+        }
+
+        payload = {
+            "text": text,
+            "model_id": "eleven_multilingual_v2",
+            "voice_settings": {
+                "stability": 0.78,
+                "similarity_boost": 0.85,
+                "style": 0.15,
+                "use_speaker_boost": True,
+            },
+        }
+
+        response = requests.post(url, json=payload, headers=headers)
+
+        if response.status_code != 200:
+            raise Exception(f"ElevenLabs error: {response.text}")
+
+        with open(tmp_path, "wb") as f:
+            f.write(response.content)
 
         return FileResponse(
             tmp_path,
@@ -658,14 +680,11 @@ async def chat_voice(data: dict):
 
     except Exception as e:
         print("CHAT VOICE ERROR:", e)
-
         return {
             "ok": False,
             "error": str(e),
             "answer": "KOÉ rencontre un problème pour parler maintenant."
         }
-
-
 @app.post("/voice-message")
 async def voice_message(
     audio: UploadFile = File(...),
