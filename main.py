@@ -600,9 +600,9 @@ async def chat(data: dict):
         })
 
         response = client.responses.create(
-            model="gpt-4.1-mini",
-            input=conversation_context,
-        )
+    model="gpt-5.5",
+    input=conversation_context,
+)
 
         answer = response.output_text.strip()
 
