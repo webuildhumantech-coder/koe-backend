@@ -3,3 +3,4 @@ uvicorn
 openai
 supabase
 python-multipart
+pypdf
