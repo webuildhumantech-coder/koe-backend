@@ -699,7 +699,7 @@ async def voice_message(
             text = "Je n’ai pas bien entendu. Tu peux répéter ?"
 
         chat_result = await chat({
-            "messages": text,
+            "message": text,
             "user_id": user_id,
             "emotion": "neutre"
         })
