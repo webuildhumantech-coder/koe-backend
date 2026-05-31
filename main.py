@@ -11,6 +11,7 @@ from fastapi.responses import FileResponse, Response
 from supabase import create_client
 from openai import OpenAI
 import requests
+from urllib.parse import quote
 
 
 SUPABASE_URL = "https://zxuysoqknkzjmpftqupl.supabase.co"
@@ -639,41 +640,22 @@ async def chat_voice(data: dict):
         ).strip()
 
         if not text:
-            text = "Je n’ai pas bien entendu. Tu peux répéter ?"
+            text = "Je n'ai pas bien entendu. Tu peux répéter ?"
 
-        tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".mp3")
-        tmp_path = tmp.name
-        tmp.close()
+        tmp_audio = tempfile.NamedTemporaryFile(delete=False, suffix=".mp3")
+        tmp_audio_path = tmp_audio.name
+        tmp_audio.close()
 
-        url = f"https://api.elevenlabs.io/v1/text-to-speech/{ELEVENLABS_VOICE_ID}"
-
-        headers = {
-            "xi-api-key": ELEVENLABS_API_KEY,
-            "Content-Type": "application/json",
-            "Accept": "audio/mpeg",
-        }
-
-        payload = {
-            "text": text,
-            "model_id": "eleven_multilingual_v2",
-            "voice_settings": {
-                "stability": 0.78,
-                "similarity_boost": 0.85,
-                "style": 0.15,
-                "use_speaker_boost": True,
-            },
-        }
-
-        response = requests.post(url, json=payload, headers=headers)
-
-        if response.status_code != 200:
-            raise Exception(f"ElevenLabs error: {response.text}")
-
-        with open(tmp_path, "wb") as f:
-            f.write(response.content)
+        with client.audio.speech.with_streaming_response.create(
+            model="gpt-4o-mini-tts",
+            voice="alloy",
+            input=text,
+            response_format="mp3"
+        ) as response:
+            response.stream_to_file(tmp_audio_path)
 
         return FileResponse(
-            tmp_path,
+            tmp_audio_path,
             media_type="audio/mpeg",
             filename="koe-chat.mp3"
         )
@@ -685,6 +667,7 @@ async def chat_voice(data: dict):
             "error": str(e),
             "answer": "KOÉ rencontre un problème pour parler maintenant."
         }
+    
 @app.post("/voice-message")
 async def voice_message(
     audio: UploadFile = File(...),
@@ -740,21 +723,24 @@ async def generate_voice_response(answer: str, transcript: str = "", header_answ
         tmp_audio_path = tmp_audio.name
         tmp_audio.close()
 
+        safe_answer = normalize_text(answer)
+        safe_transcript = normalize_text(transcript)
+
         with client.audio.speech.with_streaming_response.create(
             model="gpt-4o-mini-tts",
             voice="alloy",
-            input=answer,
+            input=safe_answer,
             response_format="mp3"
         ) as response:
             response.stream_to_file(tmp_audio_path)
 
         headers = {
-            "X-KOE-Transcript": transcript,
-            "X-KOE-Answer": header_answer or answer,
+            "X-KOE-Transcript": quote(safe_transcript),
+            "X-KOE-Answer": quote(header_answer or safe_answer),
         }
 
         if error:
-            headers["X-KOE-Error"] = error
+            headers["X-KOE-Error"] = quote(str(error))
 
         return FileResponse(
             tmp_audio_path,
@@ -770,7 +756,6 @@ async def generate_voice_response(answer: str, transcript: str = "", header_answ
             "error": str(tts_error),
             "answer": answer
         }
-
 
 @app.post("/tts")
 def tts(data: dict):
