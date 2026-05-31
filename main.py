@@ -109,7 +109,7 @@ def get_recent_memories(user_id: str, limit=12):
     try:
         result = (
             supabase.table("memories")
-            .select("role,message,created_at,type,importance")
+            .select("messages,created_at,type,importance")
             .eq("user_id", user_id)
             .order("created_at", desc=True)
             .limit(limit)
@@ -136,7 +136,7 @@ def save_memory(user_id, role, message, emotion="neutre", memory_type="conversat
             supabase.table("memories")
             .select("*")
             .eq("user_id", user_id)
-            .eq("message", message)
+            .eq("messages", message)
             .eq("type", memory_type)
             .execute()
         )
@@ -146,7 +146,7 @@ def save_memory(user_id, role, message, emotion="neutre", memory_type="conversat
 
         supabase.table("memories").insert({
             "user_id": user_id,
-            "message": message,
+            "messages": message,
             "emotion": emotion,
             "role": role,
             "type": memory_type,
@@ -236,10 +236,10 @@ def save_user_name(user_id: str, name: str):
 
         existing_name_fact = (
             supabase.table("memories")
-            .select("message")
+            .select("messages")
             .eq("user_id", user_id)
             .eq("type", "name")
-            .eq("message", name)
+            .eq("messages", name)
             .execute()
         )
 
@@ -256,7 +256,7 @@ def get_user_facts(user_id: str) -> dict:
     try:
         result = (
             supabase.table("memories")
-            .select("message,type")
+            .select("messages,type")
             .eq("user_id", user_id)
             .in_("type", [
                 "name",
@@ -276,7 +276,7 @@ def get_user_facts(user_id: str) -> dict:
 
         for row in rows:
             t = row.get("type")
-            v = row.get("message")
+            v = row.get("messages")
 
             if t and v:
                 facts[t] = v
@@ -291,10 +291,10 @@ def save_structured_fact(user_id: str, fact_type: str, fact_value: str):
     try:
         existing_fact = (
             supabase.table("memories")
-            .select("message")
+            .select("messages")
             .eq("user_id", user_id)
             .eq("type", fact_type)
-            .eq("message", fact_value)
+            .eq("messages", fact_value)
             .execute()
         )
 
@@ -426,7 +426,7 @@ def create_proactive_message_if_needed(user_id: str):
             supabase.table("proactive_messages")
             .insert({
                 "user_id": user_id,
-                "message": proactive_message,
+                "messages": proactive_message,
                 "status": "pending",
                 "shown": False,
                 "scheduled_for": now_utc_iso(),
@@ -542,7 +542,7 @@ async def chat(data: dict):
             m for m in raw_memories
             if (
                 m.get("role") in ["user", "assistant"]
-                and m.get("message")
+                and m.get("messages")
                 and m.get("type") == "conversation"
             )
         ]
@@ -561,23 +561,23 @@ async def chat(data: dict):
             })
 
         for mem in high_memories[-10:]:
-            if mem.get("message"):
+            if mem.get("messages"):
                 conversation_context.append({
                     "role": "system",
-                    "content": f"Mémoire importante utilisateur : {mem.get('message')}"
+                    "content": f"Mémoire importante utilisateur : {mem.get('messages')}"
                 })
 
         for mem in medium_memories[-5:]:
-            if mem.get("message"):
+            if mem.get("messages"):
                 conversation_context.append({
                     "role": "system",
-                    "content": f"Contexte utilisateur utile : {mem.get('message')}"
+                    "content": f"Contexte utilisateur utile : {mem.get('messages')}"
                 })
 
         for mem in conversation_memories[-10:]:
             conversation_context.append({
                 "role": mem.get("role"),
-                "content": mem.get("message")
+                "content": mem.get("messages")
             })
 
         for msg in history:
@@ -699,7 +699,7 @@ async def voice_message(
             text = "Je n’ai pas bien entendu. Tu peux répéter ?"
 
         chat_result = await chat({
-            "message": text,
+            "messages": text,
             "user_id": user_id,
             "emotion": "neutre"
         })
