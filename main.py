@@ -12,6 +12,7 @@ from supabase import create_client
 from openai import OpenAI
 import requests
 from urllib.parse import quote
+from pypdf import PdfReader
 
 
 SUPABASE_URL = "https://zxuysoqknkzjmpftqupl.supabase.co"
@@ -904,3 +905,33 @@ def run_proactive_check(data: dict):
             "ok": False,
             "error": str(e)
         }
+@app.post("/chat-pdf")
+async def chat_pdf(
+    user_id: str = Form(...),
+    message: str = Form(""),
+    file: UploadFile = File(...)
+):
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
+        tmp.write(await file.read())
+        tmp_path = tmp.name
+
+    try:
+        reader = PdfReader(tmp_path)
+        text = "\n".join((p.extract_text() or "") for p in reader.pages).strip()
+    finally:
+        os.unlink(tmp_path)
+
+    if not text:
+        return {
+            "ok": True,
+            "answer": "Je reçois le PDF, mais je n'arrive pas à en extraire le texte."
+        }
+
+    text = text[:12000]
+    full_message = f"[Contenu du PDF]\n{text}\n\n[Message utilisateur]\n{message}"
+
+    return await chat({
+        "message": full_message,
+        "user_id": user_id,
+        "emotion": "neutre"
+    })        
