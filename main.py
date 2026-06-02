@@ -448,6 +448,23 @@ def root():
     return {"status": "KOÉ backend is running"}
 
 
+
+@app.post("/realtime-session")
+async def realtime_session():
+    try:
+        session = client.beta.realtime.sessions.create(
+            model="gpt-realtime",
+            voice="alloy",
+            instructions=SYSTEM_PROMPT,
+        )
+        return session
+    except Exception as e:
+        print("REALTIME SESSION ERROR:", e)
+        return {
+            "ok": False,
+            "error": str(e)
+        }
+    
 @app.post("/chat")
 async def chat(data: dict):
     try:
@@ -611,7 +628,6 @@ async def chat(data: dict):
 
         answer = response.output_text.strip()
 
-        time.sleep(random.uniform(0.4, 1.2))
 
         save_memory(user_id, "assistant", answer, "neutre")
 
