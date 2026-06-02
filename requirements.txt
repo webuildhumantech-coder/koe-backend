@@ -1,6 +1,6 @@
 fastapi
 uvicorn
-openai
+openai>=1.100.0
 supabase
 python-multipart
 pypdf
