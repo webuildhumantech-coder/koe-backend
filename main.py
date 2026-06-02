@@ -452,14 +452,21 @@ def root():
 @app.post("/realtime-session")
 async def realtime_session():
     try:
-        session = client.beta.realtime.sessions.create(
-            model="gpt-realtime",
-            voice="alloy",
-            instructions=SYSTEM_PROMPT,
+        session = client.realtime.client_secrets.create(
+            session={
+                "type": "realtime",
+                "model": "gpt-realtime",
+                "audio": {
+                    "output": {
+                        "voice": "alloy"
+                    }
+                },
+                "instructions": SYSTEM_PROMPT,
+            }
         )
-        return {
-    "client_secret": session.client_secret.value
-}
+
+        return session.model_dump()
+
     except Exception as e:
         print("REALTIME SESSION ERROR:", e)
         return {
