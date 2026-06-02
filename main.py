@@ -457,7 +457,9 @@ async def realtime_session():
             voice="alloy",
             instructions=SYSTEM_PROMPT,
         )
-        return session
+        return {
+    "client_secret": session.client_secret.value
+}
     except Exception as e:
         print("REALTIME SESSION ERROR:", e)
         return {
