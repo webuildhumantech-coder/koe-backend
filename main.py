@@ -588,9 +588,13 @@ async def chat(data: dict):
         ]
 
         conversation_context = [
-            {
-                "role": "system",
-                "content": SYSTEM_PROMPT
+    {
+        "role": "system",
+        "content": """You are KOÉ.
+You are a conversational voice companion.
+Respond only to what the user says.
+Keep responses concise and helpful."""
+        
             }
         ]
 
