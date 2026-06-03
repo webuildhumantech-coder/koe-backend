@@ -452,6 +452,7 @@ def root():
 @app.post("/realtime-session")
 async def realtime_session():
     try:
+<<<<<<< HEAD
         session = client.beta.realtime.sessions.create(
             model="gpt-realtime",
             voice="alloy",
@@ -459,10 +460,26 @@ async def realtime_session():
 You are a conversational voice companion.
 Respond only to what the user says.
 Keep responses concise and helpful.""",
+=======
+        session = client.realtime.client_secrets.create(
+            session={
+                "type": "realtime",
+                "model": "gpt-realtime",
+                "audio": {
+                    "output": {
+                        "voice": "alloy"
+                    }
+                },
+                "instructions": """You are KOÉ.
+You are a conversational voice companion.
+Respond only to what the user says.
+Keep responses concise and helpful.""",
+            }
+>>>>>>> 807352cba81e7a51e687673cd7566b89cc11133e
         )
-        return {
-    "client_secret": session.client_secret.value
-}
+
+        return session.model_dump()
+
     except Exception as e:
         print("REALTIME SESSION ERROR:", e)
         return {
