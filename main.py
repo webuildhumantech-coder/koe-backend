@@ -455,7 +455,10 @@ async def realtime_session():
         session = client.beta.realtime.sessions.create(
             model="gpt-realtime",
             voice="alloy",
-            instructions=SYSTEM_PROMPT,
+            instructions="instructions": """You are KOÉ.
+You are a conversational voice companion.
+Respond only to what the user says.
+Keep responses concise and helpful.""",
         )
         return {
     "client_secret": session.client_secret.value
