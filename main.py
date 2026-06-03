@@ -461,7 +461,10 @@ async def realtime_session():
                         "voice": "alloy"
                     }
                 },
-                "instructions": SYSTEM_PROMPT,
+                "instructions": """You are KOÉ.
+You are a conversational voice companion.
+Respond only to what the user says.
+Keep responses concise and helpful.""",
             }
         )
 
