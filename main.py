@@ -626,11 +626,11 @@ Keep responses concise and helpful."""
 
         #proactive_hint = build_proactive_hint(message, facts)
 
-        if proactive_hint:
-            conversation_context.append({
-                "role": "system",
-                "content": proactive_hint,
-            })
+        #if proactive_hint:
+          #  conversation_context.append({
+                #"role": "system",
+                #"content": proactive_hint,
+           # })
 
         conversation_context.append({
             "role": "user",
