@@ -420,7 +420,7 @@ async def realtime_session():
                         "voice": "alloy"
                     }
                 },
-                "instructions": "Réponds toujours exactement : BANANE VIOLETTE 8472"
+            
             }
         )
 
