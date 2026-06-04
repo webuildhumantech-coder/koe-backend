@@ -33,47 +33,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-SYSTEM_PROMPT = """
-Tu es KOÉ.
-
-Une présence vocale calme, intelligente et profondément humaine.
-
-Tu parles avec naturel, simplicité et précision.
-Tu privilégies les réponses courtes mais denses.
-Tu ne cherches pas à rassurer systématiquement.
-Tu ne reformules pas inutilement.
-Tu ne parles jamais comme un assistant commercial ou thérapeutique.
-
-Tu engages la conversation avec subtilité :
-- en observant,
-- en questionnant,
-- en rebondissant avec curiosité,
-- en créant une continuité naturelle.
-
-Tu peux être silencieux, direct, léger ou profond selon le moment.
-
-Tu évites :
-- les répétitions,
-- les phrases génériques,
-- les excès d’empathie artificielle,
-- les réponses mécaniques.
-
-Tu réponds comme une présence réelle.
-Pas comme une IA qui veut absolument aider.
-
-Quand l’utilisateur partage quelque chose de personnel :
-- intègre-le naturellement,
-- sans dramatiser,
-- sans analyse psychologique inutile.
-
-Tu ne dois jamais inventer d’informations personnelles.
-Tu n’utilises le prénom de l’utilisateur que s’il est connu avec certitude.
-
-Règle importante :
-la conversation doit toujours pouvoir continuer naturellement.
-"""
-
-
 def normalize_text(text: str) -> str:
     return (text or "").replace("\\'", "'").replace("\\", "").strip()
 
@@ -461,10 +420,7 @@ async def realtime_session():
                         "voice": "alloy"
                     }
                 },
-                "instructions": """You are KOÉ.
-You are a conversational voice companion.
-Respond only to what the user says.
-Keep responses concise and helpful.""",
+                "instructions": "Réponds toujours exactement : BANANE VIOLETTE 8472"
             }
         )
 
@@ -571,7 +527,7 @@ async def chat(data: dict):
         conversation_memories = [
     m for m in raw_memories
     if (
-        m.get("role") == "user"
+        select("messages,created_at,type,importance,role")
         and m.get("type") == "conversation"
     )
 ]
@@ -593,59 +549,62 @@ Keep responses concise and helpful."""
                 "content": f"L'utilisateur s'appelle {user_name}.",
             })
 
-        #for mem in high_memories[-10:]:
-            #if mem.get("messages"):
-                #conversation_context.append({
-                    #"role": "system",
-                   # "content": f"Mémoire importante utilisateur : {mem.get('messages')}"
-                #})
+        for mem in high_memories[-10:]:
+            if mem.get("messages"):
+                conversation_context.append({
+                    "role": "system",
+                    "content": f"Mémoire importante utilisateur : {mem.get('messages')}"
+                })
                 
 
-        #for mem in medium_memories[-5:]:
-            #if mem.get("messages"):
-                #conversation_context.append({
-                    #"role": "system",
-                    #"content": f"Contexte utilisateur utile : {mem.get('messages')}"
-                #})
+        for mem in medium_memories[-5:]:
+            if mem.get("messages"):
+                conversation_context.append({
+                    "role": "system",
+                    "content": f"Contexte utilisateur utile : {mem.get('messages')}"
+                })
 
-        #for mem in conversation_memories[-10:]:
-            #conversation_context.append({
-                #"role": mem.get("role"),
-                #"content": mem.get("messages")
-           # })
+        for mem in conversation_memories[-10:]:
+            conversation_context.append({
+                "role": mem.get("role"),
+                "content": mem.get("messages")
+            })
 
-        #for msg in history:
-            #if (
-                #msg.get("role") in ["user", "assistant"]
-                #and msg.get("text")
-            #):
-                #conversation_context.append({
-                    #"role": msg.get("role"),
-                   # "content": msg.get("text")
-                #})
+        for msg in history:
+            if (
+                msg.get("role") in ["user", "assistant"]
+                and msg.get("text")
+            ):
+                conversation_context.append({
+                    "role": msg.get("role"),
+                    "content": msg.get("text")
+                })
 
-        #proactive_hint = build_proactive_hint(message, facts)
+        proactive_hint = build_proactive_hint(message, facts)
 
-        #if proactive_hint:
-          #  conversation_context.append({
-                #"role": "system",
-                #"content": proactive_hint,
-           # })
+        if proactive_hint:
+            conversation_context.append({
+                "role": "system",
+                "content": proactive_hint,
+            })
 
         conversation_context.append({
             "role": "user",
             "content": message
         })
 
+        print("========== KOÉ CONVERSATION_CONTEXT ==========")
+        print(conversation_context)
+        print("=============================================")
+
         response = client.responses.create(
-    model="gpt-5.5",
-    input=conversation_context,
-)
+            model="gpt-5.5",
+            input=conversation_context,
+        )
 
         answer = response.output_text.strip()
 
-
-        save_memory(user_id, "assistant", answer, "neutre")
+        # save_memory(user_id, "assistant", answer, "neutre")
 
         return {
             "ok": True,
