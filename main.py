@@ -69,7 +69,7 @@ def get_recent_memories(user_id: str, limit=12):
     try:
         result = (
             supabase.table("memories")
-            .select("messages,created_at,type,importance")
+            .select("messages,created_at,type,importance,role")
             .eq("user_id", user_id)
             .order("created_at", desc=True)
             .limit(limit)
@@ -527,7 +527,7 @@ async def chat(data: dict):
         conversation_memories = [
     m for m in raw_memories
     if (
-        select("messages,created_at,type,importance,role")
+        m.get("role") == "user"
         and m.get("type") == "conversation"
     )
 ]
@@ -537,11 +537,16 @@ async def chat(data: dict):
         "role": "system",
         "content": """You are KOÉ.
 You are a conversational voice companion.
-Respond only to what the user says.
-Keep responses concise and helpful."""
-        
-            }
-        ]
+You cannot see the user.
+You do not have camera access.
+Respond only to the latest user message.
+Keep responses short, simple and useful."""
+    },
+    {
+        "role": "user",
+        "content": message
+    }
+]
 
         if user_name:
             conversation_context.append({
@@ -596,6 +601,7 @@ Keep responses concise and helpful."""
         print("========== KOÉ CONVERSATION_CONTEXT ==========")
         print(conversation_context)
         print("=============================================")
+        print("KOE_CONTEXT:", conversation_context)
 
         response = client.responses.create(
             model="gpt-5.5",
