@@ -569,13 +569,12 @@ async def chat(data: dict):
         ]
 
         conversation_memories = [
-            m for m in raw_memories
-            if (
-                m.get("role") in ["user", "assistant"]
-                and m.get("messages")
-                and m.get("type") == "conversation"
-            )
-        ]
+    m for m in raw_memories
+    if (
+        m.get("role") == "user"
+        and m.get("type") == "conversation"
+    )
+]
 
         conversation_context = [
     {
