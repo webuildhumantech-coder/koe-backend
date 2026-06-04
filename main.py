@@ -613,9 +613,9 @@ Keep responses short, simple and useful."""
         # save_memory(user_id, "assistant", answer, "neutre")
 
         return {
-            "ok": True,
-            "answer": answer
-        }
+    "ok": True,
+    "answer": "TEST BACKEND"
+}
 
     except Exception as e:
         print("ERREUR BACKEND GLOBALE:", e)
