@@ -593,37 +593,38 @@ Keep responses concise and helpful."""
                 "content": f"L'utilisateur s'appelle {user_name}.",
             })
 
-        for mem in high_memories[-10:]:
-            if mem.get("messages"):
-                conversation_context.append({
-                    "role": "system",
-                    "content": f"Mémoire importante utilisateur : {mem.get('messages')}"
-                })
+        #for mem in high_memories[-10:]:
+            #if mem.get("messages"):
+                #conversation_context.append({
+                    #"role": "system",
+                   # "content": f"Mémoire importante utilisateur : {mem.get('messages')}"
+                #})
+                
 
-        for mem in medium_memories[-5:]:
-            if mem.get("messages"):
-                conversation_context.append({
-                    "role": "system",
-                    "content": f"Contexte utilisateur utile : {mem.get('messages')}"
-                })
+        #for mem in medium_memories[-5:]:
+            #if mem.get("messages"):
+                #conversation_context.append({
+                    #"role": "system",
+                    #"content": f"Contexte utilisateur utile : {mem.get('messages')}"
+                #})
 
-        for mem in conversation_memories[-10:]:
-            conversation_context.append({
-                "role": mem.get("role"),
-                "content": mem.get("messages")
-            })
+        #for mem in conversation_memories[-10:]:
+            #conversation_context.append({
+                #"role": mem.get("role"),
+                #"content": mem.get("messages")
+           # })
 
-        for msg in history:
-            if (
-                msg.get("role") in ["user", "assistant"]
-                and msg.get("text")
-            ):
-                conversation_context.append({
-                    "role": msg.get("role"),
-                    "content": msg.get("text")
-                })
+        #for msg in history:
+            #if (
+                #msg.get("role") in ["user", "assistant"]
+                #and msg.get("text")
+            #):
+                #conversation_context.append({
+                    #"role": msg.get("role"),
+                   # "content": msg.get("text")
+                #})
 
-        proactive_hint = build_proactive_hint(message, facts)
+        #proactive_hint = build_proactive_hint(message, facts)
 
         if proactive_hint:
             conversation_context.append({
