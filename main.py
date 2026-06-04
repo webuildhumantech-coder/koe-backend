@@ -420,10 +420,18 @@ async def realtime_session():
                         "voice": "alloy"
                     }
                 },
-            
+            "instructions": """Tu es KOÉ.
+Réponds uniquement en français.
+Ne parle jamais japonais.
+Ne parle jamais espagnol.
+Ne change jamais de langue sauf si l'utilisateur le demande explicitement.
+Tu ne peux pas voir l'utilisateur.
+Tu n'as pas accès à la caméra.
+Tu réponds seulement à ce que l'utilisateur dit.
+Réponses courtes, simples, naturelles."""
             }
         )
-
+        print("REALTIME SESSION CREATED")
         return session.model_dump()
 
     except Exception as e:
