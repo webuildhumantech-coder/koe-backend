@@ -14,8 +14,8 @@ import requests
 from urllib.parse import quote
 from pypdf import PdfReader
 
-SUPABASE_URL = os.getenv("https://zxuysoqknkzjmpftqupl.supabase.co")
-SUPABASE_KEY = os.getenv("eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp4dXlzb3Frbmt6am1wZnRxdXBsIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NjM2NjQwMiwiZXhwIjoyMDkxOTQyNDAyfQ.f-pbo_FNBpJcM-Cy0jw_R19JA3TLX_6VpiwAJmTmY6c")
+SUPABASE_URL = os.getenv("SUPABASE_URL")
+SUPABASE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
 
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
