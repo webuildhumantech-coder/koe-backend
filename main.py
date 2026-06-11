@@ -454,8 +454,9 @@ async def log_message(payload: dict):
 
     except Exception as e:
         print("LOG MESSAGE ERROR:", e)
-        return {"ok": False, "error": str(e)}
-
+        return {"ok": False, "error": str(e)
+        
+            }
 
 @app.post("/chat")
 async def chat(data: dict):
