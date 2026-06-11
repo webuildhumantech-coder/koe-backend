@@ -527,28 +527,28 @@ async def chat(data: dict):
             }
 
         history_response = (
-            supabase.table("messages")
-            .select("role,text")
-            .eq("user_id", user_id)
-            .order("created_at", desc=True)
-            .limit(12)
-            .execute()
-        )
+    supabase.table("messages")
+    .select("role,text")
+    .eq("user_id", user_id)
+    .order("created_at", desc=True)
+    .limit(12)
+    .execute()
+)
 
-        history = history_response.data or []
-        history.reverse()
+history = history_response.data or []
+history.reverse()
 
-        raw_memories = get_recent_memories(user_id, limit=30)
+raw_memories = get_recent_memories(user_id, limit=30)
 
-        high_memories = [
-            m for m in raw_memories
-            if m.get("importance") == "high"
-        ]
+high_memories = [
+    m for m in raw_memories
+    if m.get("importance") == "high"
+]
 
-        medium_memories = [
-            m for m in raw_memories
-            if m.get("importance") == "medium"
-        ]
+medium_memories = [
+    m for m in raw_memories
+    if m.get("importance") == "medium"
+]
 
         conversation_memories = [
     m for m in raw_memories
