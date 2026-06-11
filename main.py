@@ -634,7 +634,8 @@ Keep responses short, simple and useful."""
             "error": str(e)
         }
 
-
+"""
+# LEGACY ROUTE - TO REMOVE
 @app.post("/chat-voice")
 async def chat_voice(data: dict):
     try:
@@ -673,7 +674,7 @@ async def chat_voice(data: dict):
             "error": str(e),
             "answer": "KOÉ rencontre un problème pour parler maintenant."
         }
-    
+    """
 @app.post("/voice-message")
 async def voice_message(
     audio: UploadFile = File(...),
