@@ -440,7 +440,23 @@ Réponses courtes, simples, naturelles."""
             "ok": False,
             "error": str(e)
         }
-    
+        
+@app.post("/log-message")
+async def log_message(payload: dict):
+    try:
+        supabase.table("messages").insert({
+            "user_id": payload.get("user_id"),
+            "role": payload.get("role"),
+            "text": payload.get("content")
+        }).execute()
+
+        return {"ok": True}
+
+    except Exception as e:
+        print("LOG MESSAGE ERROR:", e)
+        return {"ok": False, "error": str(e)}
+
+
 @app.post("/chat")
 async def chat(data: dict):
     try:
