@@ -453,9 +453,9 @@ async def log_message(payload: dict):
 
         return {"ok": True}
 
-    except Exception as e:
+       except Exception as e:
         print("LOG MESSAGE ERROR:", e)
-        return {"ok": False, "error": str(e)
+        return {"ok": False, "error": str(e)}
         
             }
 
@@ -929,6 +929,7 @@ def run_proactive_check(data: dict):
             "ok": False,
             "error": str(e)
         }
+        
 @app.post("/chat-pdf")
 async def chat_pdf(
     user_id: str = Form(...),
