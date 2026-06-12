@@ -457,6 +457,14 @@ async def log_message(payload: dict):
             "text": payload.get("content")
         }).execute()
 
+        supabase.table("usage_events").insert({
+    "user_id": payload.get("user_id"),
+    "event_name": "message_logged",
+    "metadata": {
+        "role": payload.get("role")
+    }
+        }).execute()
+
         return {"ok": True}
 
     except Exception as e:
