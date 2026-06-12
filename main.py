@@ -65,7 +65,7 @@ def get_memory_importance(memory_type, emotion="neutre"):
     return "medium"
 
 
-def get_recent_memories(user_id: str, limit=12):
+def get_recent_memories(user_id: str, limit=20):
     try:
         result = (
             supabase.table("memories")
