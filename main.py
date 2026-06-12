@@ -411,15 +411,16 @@ def root():
 @app.post("/realtime-session")
 async def realtime_session():
     try:
-        session={
-    "type": "realtime",
-    "model": "gpt-realtime",
-    "audio": {
-        "output": {
-            "voice": "alloy"
-        }
-    },
-    "instructions": """
+        session = client.realtime.client_secrets.create(
+            session={
+                "type": "realtime",
+                "model": "gpt-realtime",
+                "audio": {
+                    "output": {
+                        "voice": "alloy"
+                    }
+                },
+                "instructions": """
 Tu es KOÉ.
 Tu réponds toujours en français.
 Tu ne réponds jamais en japonais.
@@ -433,12 +434,15 @@ Si tu détectes une autre langue ou du bruit audio, tu réponds :
 Tu es un compagnon vocal calme, simple et naturel.
 Tes réponses sont courtes, humaines et utiles.
 """
-}
+            }
+        )
+
         print("REALTIME SESSION CREATED")
         return session.model_dump()
 
     except Exception as e:
         print("REALTIME SESSION ERROR:", e)
+
         return {
             "ok": False,
             "error": str(e)
@@ -457,10 +461,11 @@ async def log_message(payload: dict):
 
     except Exception as e:
         print("LOG MESSAGE ERROR:", e)
-        return {"ok": False, "error": str(e)
-                
+        return {
+            "ok": False,
+            "error": str(e)
         }
-        
+
 @app.post("/chat")
 async def chat(data: dict):
     try:
@@ -625,7 +630,7 @@ Keep responses short, simple and useful."""
             "answer": "",
             "error": str(e)
         }
-
+    
 @app.post("/voice-message")
 async def voice_message(
     audio: UploadFile = File(...),

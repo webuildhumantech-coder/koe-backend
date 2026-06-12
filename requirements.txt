@@ -4,3 +4,4 @@ openai>=1.100.0
 supabase
 python-multipart
 pypdf
+requests
