@@ -13,6 +13,7 @@ from openai import OpenAI
 import requests
 from urllib.parse import quote
 from pypdf import PdfReader
+from datetime import datetime, timezone
 
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
@@ -928,3 +929,67 @@ async def chat_pdf(
         "user_id": user_id,
         "emotion": "neutre"
     })  
+@app.post("/usage-session/start")
+async def usage_session_start(payload: dict):
+    try:
+        user_id = payload.get("user_id")
+        platform = payload.get("platform", "web")
+        app_version = payload.get("app_version", "v1")
+
+        result = supabase.table("usage_sessions").insert({
+            "user_id": user_id,
+            "started_at": datetime.now(timezone.utc).isoformat(),
+            "platform": platform,
+            "app_version": app_version,
+            "message_count": 0
+        }).execute()
+
+        session_id = result.data[0]["id"] if result.data else None
+
+        return {
+            "ok": True,
+            "session_id": session_id
+        }
+
+    except Exception as e:
+        print("USAGE SESSION START ERROR:", e)
+        return {
+            "ok": False,
+            "error": str(e)
+        }
+
+
+@app.post("/usage-session/end")
+async def usage_session_end(payload: dict):
+    try:
+        session_id = payload.get("session_id")
+        message_count = payload.get("message_count", 0)
+
+        session_result = (
+            supabase.table("usage_sessions")
+            .select("started_at")
+            .eq("id", session_id)
+            .single()
+            .execute()
+        )
+
+        started_at_str = session_result.data.get("started_at")
+        started_at = datetime.fromisoformat(started_at_str.replace("Z", "+00:00"))
+        ended_at = datetime.now(timezone.utc)
+
+        duration_seconds = int((ended_at - started_at).total_seconds())
+
+        supabase.table("usage_sessions").update({
+            "ended_at": ended_at.isoformat(),
+            "duration_seconds": duration_seconds,
+            "message_count": message_count
+        }).eq("id", session_id).execute()
+
+        return {"ok": True}
+
+    except Exception as e:
+        print("USAGE SESSION END ERROR:", e)
+        return {
+            "ok": False,
+            "error": str(e)
+        }
