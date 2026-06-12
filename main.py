@@ -531,7 +531,7 @@ async def chat(data: dict):
     .select("role,text")
     .eq("user_id", user_id)
     .order("created_at", desc=True)
-    .limit(12)
+    .limit(20)
     .execute()
 )
 
