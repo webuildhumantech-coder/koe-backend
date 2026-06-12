@@ -14,11 +14,11 @@ import requests
 from urllib.parse import quote
 from pypdf import PdfReader
 
-
-SUPABASE_URL = "https://zxuysoqknkzjmpftqupl.supabase.co"
-SUPABASE_KEY = "sb_publishable_rrh5vevB5bc5E1xauwOaPw_EyG3xSW8"
+SUPABASE_URL = os.getenv("SUPABASE_URL")
+SUPABASE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
 
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
+
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 ELEVENLABS_API_KEY = os.getenv("ELEVENLABS_API_KEY")
 ELEVENLABS_VOICE_ID = "tJvgmaVM5tDwPVrtn8TA"
@@ -411,26 +411,29 @@ def root():
 @app.post("/realtime-session")
 async def realtime_session():
     try:
-        session = client.realtime.client_secrets.create(
-            session={
-                "type": "realtime",
-                "model": "gpt-realtime",
-                "audio": {
-                    "output": {
-                        "voice": "alloy"
-                    }
-                },
-            "instructions": """Tu es KOÉ.
-Réponds uniquement en français.
-Ne parle jamais japonais.
-Ne parle jamais espagnol.
-Ne change jamais de langue sauf si l'utilisateur le demande explicitement.
-Tu ne peux pas voir l'utilisateur.
-Tu n'as pas accès à la caméra.
-Tu réponds seulement à ce que l'utilisateur dit.
-Réponses courtes, simples, naturelles."""
-            }
-        )
+        session={
+    "type": "realtime",
+    "model": "gpt-realtime",
+    "audio": {
+        "output": {
+            "voice": "alloy"
+        }
+    },
+    "instructions": """
+Tu es KOÉ.
+Tu réponds toujours en français.
+Tu ne réponds jamais en japonais.
+Tu ne réponds jamais en coréen.
+Tu ne réponds jamais en portugais.
+Tu ne réponds jamais en anglais.
+
+Si tu détectes une autre langue ou du bruit audio, tu réponds :
+"Je n'ai pas bien compris. Tu peux répéter ?"
+
+Tu es un compagnon vocal calme, simple et naturel.
+Tes réponses sont courtes, humaines et utiles.
+"""
+}
         print("REALTIME SESSION CREATED")
         return session.model_dump()
 
@@ -440,7 +443,24 @@ Réponses courtes, simples, naturelles."""
             "ok": False,
             "error": str(e)
         }
-    
+        
+@app.post("/log-message")
+async def log_message(payload: dict):
+    try:
+        supabase.table("messages").insert({
+            "user_id": payload.get("user_id"),
+            "role": payload.get("role"),
+            "text": payload.get("content")
+        }).execute()
+
+        return {"ok": True}
+
+    except Exception as e:
+        print("LOG MESSAGE ERROR:", e)
+        return {"ok": False, "error": str(e)
+                
+        }
+        
 @app.post("/chat")
 async def chat(data: dict):
     try:
@@ -457,12 +477,10 @@ async def chat(data: dict):
         normalized_message = normalize_text(message).lower()
 
         extracted_name = extract_name(message)
-
         if extracted_name:
             save_user_name(user_id, extracted_name)
 
         extracted_fact = extract_fact(message)
-
         if extracted_fact and extracted_fact.get("value"):
             save_structured_fact(
                 user_id,
@@ -483,37 +501,25 @@ async def chat(data: dict):
             or "quel est mon prénom" in normalized_message
             or "tu te souviens de mon prénom" in normalized_message
         ):
-            if user_name:
-                answer = f"Tu t'appelles {user_name}."
-            else:
-                answer = "Je ne connais pas encore ton prénom."
-
+            answer = f"Tu t'appelles {user_name}." if user_name else "Je ne connais pas encore ton prénom."
             save_memory(user_id, "assistant", answer, "neutre")
-
-            return {
-                "ok": True,
-                "answer": answer
-            }
+            return {"ok": True, "answer": answer}
 
         if "quel est mon objectif" in normalized_message:
-            if facts.get("objectif"):
-                answer = f"Ton objectif actuel est de {facts['objectif']}."
-            else:
-                answer = "Je ne connais pas encore ton objectif."
-
+            answer = (
+                f"Ton objectif actuel est de {facts['objectif']}."
+                if facts.get("objectif")
+                else "Je ne connais pas encore ton objectif."
+            )
             save_memory(user_id, "assistant", answer, "neutre")
-
-            return {
-                "ok": True,
-                "answer": answer
-            }
+            return {"ok": True, "answer": answer}
 
         history_response = (
             supabase.table("messages")
             .select("role,text")
             .eq("user_id", user_id)
             .order("created_at", desc=True)
-            .limit(12)
+            .limit(20)
             .execute()
         )
 
@@ -533,28 +539,21 @@ async def chat(data: dict):
         ]
 
         conversation_memories = [
-    m for m in raw_memories
-    if (
-        m.get("role") == "user"
-        and m.get("type") == "conversation"
-    )
-]
+            m for m in raw_memories
+            if m.get("role") == "user" and m.get("type") == "conversation"
+        ]
 
         conversation_context = [
-    {
-        "role": "system",
-        "content": """You are KOÉ.
+            {
+                "role": "system",
+                "content": """You are KOÉ.
 You are a conversational voice companion.
 You cannot see the user.
 You do not have camera access.
 Respond only to the latest user message.
 Keep responses short, simple and useful."""
-    },
-    {
-        "role": "user",
-        "content": message
-    }
-]
+            }
+        ]
 
         if user_name:
             conversation_context.append({
@@ -568,7 +567,6 @@ Keep responses short, simple and useful."""
                     "role": "system",
                     "content": f"Mémoire importante utilisateur : {mem.get('messages')}"
                 })
-                
 
         for mem in medium_memories[-5:]:
             if mem.get("messages"):
@@ -584,17 +582,13 @@ Keep responses short, simple and useful."""
             })
 
         for msg in history:
-            if (
-                msg.get("role") in ["user", "assistant"]
-                and msg.get("text")
-            ):
+            if msg.get("role") in ["user", "assistant"] and msg.get("text"):
                 conversation_context.append({
                     "role": msg.get("role"),
                     "content": msg.get("text")
                 })
 
         proactive_hint = build_proactive_hint(message, facts)
-
         if proactive_hint:
             conversation_context.append({
                 "role": "system",
@@ -609,7 +603,6 @@ Keep responses short, simple and useful."""
         print("========== KOÉ CONVERSATION_CONTEXT ==========")
         print(conversation_context)
         print("=============================================")
-        print("KOE_CONTEXT:", conversation_context)
 
         response = client.responses.create(
             model="gpt-5.5",
@@ -617,13 +610,12 @@ Keep responses short, simple and useful."""
         )
 
         answer = response.output_text.strip()
-
-        # save_memory(user_id, "assistant", answer, "neutre")
+        save_memory(user_id, "assistant", answer, "neutre")
 
         return {
-    "ok": True,
-    "answer": "TEST BACKEND"
-}
+            "ok": True,
+            "answer": answer
+        }
 
     except Exception as e:
         print("ERREUR BACKEND GLOBALE:", e)
@@ -634,46 +626,6 @@ Keep responses short, simple and useful."""
             "error": str(e)
         }
 
-
-@app.post("/chat-voice")
-async def chat_voice(data: dict):
-    try:
-        text = (
-            data.get("message")
-            or data.get("text")
-            or data.get("answer")
-            or ""
-        ).strip()
-
-        if not text:
-            text = "Je n'ai pas bien entendu. Tu peux répéter ?"
-
-        tmp_audio = tempfile.NamedTemporaryFile(delete=False, suffix=".mp3")
-        tmp_audio_path = tmp_audio.name
-        tmp_audio.close()
-
-        with client.audio.speech.with_streaming_response.create(
-            model="gpt-4o-mini-tts",
-            voice="alloy",
-            input=text,
-            response_format="mp3"
-        ) as response:
-            response.stream_to_file(tmp_audio_path)
-
-        return FileResponse(
-            tmp_audio_path,
-            media_type="audio/mpeg",
-            filename="koe-chat.mp3"
-        )
-
-    except Exception as e:
-        print("CHAT VOICE ERROR:", e)
-        return {
-            "ok": False,
-            "error": str(e),
-            "answer": "KOÉ rencontre un problème pour parler maintenant."
-        }
-    
 @app.post("/voice-message")
 async def voice_message(
     audio: UploadFile = File(...),
@@ -910,6 +862,7 @@ def run_proactive_check(data: dict):
             "ok": False,
             "error": str(e)
         }
+        
 @app.post("/chat-pdf")
 async def chat_pdf(
     user_id: str = Form(...),
@@ -939,4 +892,4 @@ async def chat_pdf(
         "message": full_message,
         "user_id": user_id,
         "emotion": "neutre"
-    })        
+    })  
