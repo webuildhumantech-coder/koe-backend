@@ -451,19 +451,41 @@ Tes réponses sont courtes, humaines et utiles.
 @app.post("/log-message")
 async def log_message(payload: dict):
     try:
+        user_id = payload.get("user_id")
+        role = payload.get("role")
+        content = payload.get("content")
+
         supabase.table("messages").insert({
-            "user_id": payload.get("user_id"),
-            "role": payload.get("role"),
-            "text": payload.get("content")
+            "user_id": user_id,
+            "role": role,
+            "text": content
         }).execute()
 
         supabase.table("usage_events").insert({
-    "user_id": payload.get("user_id"),
-    "event_name": "message_logged",
-    "metadata": {
-        "role": payload.get("role")
-    }
+            "user_id": user_id,
+            "event_name": "message_logged",
+            "metadata": {
+                "role": role
+            }
         }).execute()
+
+        if role == "user":
+            supabase.table("usage_events").insert({
+                "user_id": user_id,
+                "event_name": "conversation_started",
+                "metadata": {
+                    "source": "first_user_message"
+                }
+            }).execute()
+
+        if role == "assistant":
+            supabase.table("usage_events").insert({
+                "user_id": user_id,
+                "event_name": "conversation_finished",
+                "metadata": {
+                    "source": "assistant_response"
+                }
+            }).execute()
 
         return {"ok": True}
 
