@@ -13,7 +13,7 @@ from openai import OpenAI
 import requests
 from urllib.parse import quote
 from pypdf import PdfReader
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
@@ -977,44 +977,61 @@ async def usage_session_end(payload: dict):
 
         started_at_str = session_result.data.get("started_at")
         user_id = session_result.data.get("user_id")
-        
+
         print("STARTED AT", started_at_str)
-        started_at = datetime.fromisoformat(started_at_str.replace("Z", "+00:00"))
+
+        started_at = datetime.fromisoformat(
+            started_at_str.replace("Z", "+00:00")
+        )
         ended_at = datetime.now(timezone.utc)
 
-        duration_seconds = int((ended_at - started_at).total_seconds())
+        duration_seconds = int(
+            (ended_at - started_at).total_seconds()
+        )
+
+        started_window = started_at - timedelta(seconds=10)
+        ended_window = ended_at + timedelta(seconds=10)
 
         messages_result = (
-        supabase.table("messages")
-        .select("id", count="exact")
-        .eq("user_id", user_id)
-        .gte("created_at", started_at.isoformat())
-        .lte("created_at", ended_at.isoformat())
-        .execute()
-)
+            supabase.table("messages")
+            .select("id", count="exact")
+            .eq("user_id", user_id)
+            .gte("created_at", started_window.isoformat())
+            .lte("created_at", ended_window.isoformat())
+            .execute()
+        )
 
         message_count = messages_result.count or 0
-        
-        print("UPDATING SESSION", {
-        "session_id": session_id,
-        "duration_seconds": duration_seconds,
-        "message_count": message_count
-})
 
-        supabase.table("usage_sessions").update({
-            "ended_at": ended_at.isoformat(),
-            "duration_seconds": duration_seconds,
-            "message_count": message_count
-        }).eq("id", session_id).execute()
+        print("MESSAGES COUNT RESULT", message_count)
+
+        print(
+            "UPDATING SESSION",
+            {
+                "session_id": session_id,
+                "duration_seconds": duration_seconds,
+                "message_count": message_count,
+            },
+        )
+
+        supabase.table("usage_sessions").update(
+            {
+                "ended_at": ended_at.isoformat(),
+                "duration_seconds": duration_seconds,
+                "message_count": message_count,
+            }
+        ).eq("id", session_id).execute()
 
         return {"ok": True}
 
     except Exception as e:
         print("USAGE SESSION END ERROR:", e)
+
         return {
             "ok": False,
-            "error": str(e)
+            "error": str(e),
         }
+    
 @app.post("/retention/update")
 async def retention_update(payload: dict):
     try:
