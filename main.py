@@ -1003,7 +1003,7 @@ async def usage_session_end(payload: dict):
             "ok": False,
             "error": str(e)
         }
-    @app.post("/retention/update")
+@app.post("/retention/update")
 async def retention_update(payload: dict):
     try:
         user_id = payload.get("user_id")
