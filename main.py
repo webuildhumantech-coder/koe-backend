@@ -1003,3 +1003,50 @@ async def usage_session_end(payload: dict):
             "ok": False,
             "error": str(e)
         }
+    @app.post("/retention/update")
+async def retention_update(payload: dict):
+    try:
+        user_id = payload.get("user_id")
+        now = datetime.now(timezone.utc)
+
+        existing = (
+            supabase.table("retention_metrics")
+            .select("*")
+            .eq("user_id", user_id)
+            .limit(1)
+            .execute()
+        )
+
+        if not existing.data:
+            supabase.table("retention_metrics").insert({
+                "user_id": user_id,
+                "first_seen_at": now.isoformat(),
+                "last_seen_at": now.isoformat(),
+                "active_days": 1,
+                "total_sessions": 1,
+                "total_messages": 0
+            }).execute()
+
+            return {"ok": True, "status": "created"}
+
+        row = existing.data[0]
+
+        last_seen_str = row.get("last_seen_at")
+        last_seen = datetime.fromisoformat(last_seen_str.replace("Z", "+00:00"))
+
+        is_new_day = last_seen.date() != now.date()
+
+        supabase.table("retention_metrics").update({
+            "last_seen_at": now.isoformat(),
+            "active_days": row.get("active_days", 1) + (1 if is_new_day else 0),
+            "total_sessions": row.get("total_sessions", 0) + 1
+        }).eq("id", row.get("id")).execute()
+
+        return {"ok": True, "status": "updated"}
+
+    except Exception as e:
+        print("RETENTION UPDATE ERROR:", e)
+        return {
+            "ok": False,
+            "error": str(e)
+        }
