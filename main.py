@@ -962,6 +962,8 @@ async def usage_session_start(payload: dict):
 @app.post("/usage-session/end")
 async def usage_session_end(payload: dict):
     try:
+        print("SESSION END PAYLOAD", payload)
+
         session_id = payload.get("session_id")
         message_count = payload.get("message_count", 0)
 
@@ -974,10 +976,18 @@ async def usage_session_end(payload: dict):
         )
 
         started_at_str = session_result.data.get("started_at")
+        
+        print("STARTED AT", started_at_str)
         started_at = datetime.fromisoformat(started_at_str.replace("Z", "+00:00"))
         ended_at = datetime.now(timezone.utc)
 
         duration_seconds = int((ended_at - started_at).total_seconds())
+        
+        print("UPDATING SESSION", {
+        "session_id": session_id,
+        "duration_seconds": duration_seconds,
+        "message_count": message_count
+})
 
         supabase.table("usage_sessions").update({
             "ended_at": ended_at.isoformat(),
