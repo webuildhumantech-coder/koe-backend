@@ -929,6 +929,7 @@ async def chat_pdf(
         "user_id": user_id,
         "emotion": "neutre"
     })  
+
 @app.post("/usage-session/start")
 async def usage_session_start(payload: dict):
     try:
@@ -993,18 +994,31 @@ async def usage_session_end(payload: dict):
         ended_window = ended_at + timedelta(seconds=10)
 
         messages_result = (
-            supabase.table("messages")
-            .select("id", count="exact")
-            .eq("user_id", user_id)
-            .gte("created_at", started_window.isoformat())
-            .lte("created_at", ended_window.isoformat())
-            .execute()
-        )
+        supabase.table("messages")
+        .select("id", count="exact")
+        .eq("user_id", user_id)
+        .gte("created_at", started_window.isoformat())
+        .lte("created_at", ended_window.isoformat())
+        .execute()
+)
 
         message_count = messages_result.count or 0
 
-        print("MESSAGES COUNT RESULT", message_count)
+        all_messages_result = (
+        supabase.table("messages")
+        .select("id", count="exact")
+        .eq("user_id", user_id)
+        .execute()
+)
 
+        total_messages = all_messages_result.count or 0
+
+        supabase.table("retention_metrics").update({
+        "total_messages": total_messages
+        }).eq("user_id", user_id).execute()
+
+
+        print("MESSAGES COUNT RESULT", message_count)
         print(
             "UPDATING SESSION",
             {
