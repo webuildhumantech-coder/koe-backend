@@ -963,7 +963,6 @@ async def usage_session_start(payload: dict):
 @app.post("/usage-session/end")
 async def usage_session_end(payload: dict):
     try:
-        print("SESSION END PAYLOAD", payload)
 
         session_id = payload.get("session_id")
 
@@ -977,8 +976,6 @@ async def usage_session_end(payload: dict):
 
         started_at_str = session_result.data.get("started_at")
         user_id = session_result.data.get("user_id")
-
-        print("STARTED AT", started_at_str)
 
         started_at = datetime.fromisoformat(
             started_at_str.replace("Z", "+00:00")
@@ -1003,8 +1000,6 @@ async def usage_session_end(payload: dict):
 
         message_count = messages_result.count or 0
 
-        print("MESSAGES COUNT RESULT", message_count)
-
         supabase.table("usage_sessions").update({
             "ended_at": ended_at.isoformat(),
             "duration_seconds": duration_seconds,
@@ -1020,9 +1015,6 @@ async def usage_session_end(payload: dict):
 
         total_messages = all_messages_result.count or 0
 
-        print("RETENTION USER ID", user_id)
-        print("TOTAL MESSAGES", total_messages)
-
         retention_update_result = (
             supabase.table("retention_metrics")
             .update({
@@ -1031,8 +1023,6 @@ async def usage_session_end(payload: dict):
             .eq("user_id", user_id)
             .execute()
         )
-
-        print("RETENTION UPDATE RESULT", retention_update_result.data)
 
         return {"ok": True}
 
