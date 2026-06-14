@@ -966,7 +966,6 @@ async def usage_session_end(payload: dict):
         print("SESSION END PAYLOAD", payload)
 
         session_id = payload.get("session_id")
-        message_count = payload.get("message_count", 0)
 
         session_result = (
             supabase.table("usage_sessions")
@@ -994,47 +993,46 @@ async def usage_session_end(payload: dict):
         ended_window = ended_at + timedelta(seconds=10)
 
         messages_result = (
-        supabase.table("messages")
-        .select("id", count="exact")
-        .eq("user_id", user_id)
-        .gte("created_at", started_window.isoformat())
-        .lte("created_at", ended_window.isoformat())
-        .execute()
-)
+            supabase.table("messages")
+            .select("id", count="exact")
+            .eq("user_id", user_id)
+            .gte("created_at", started_window.isoformat())
+            .lte("created_at", ended_window.isoformat())
+            .execute()
+        )
 
         message_count = messages_result.count or 0
 
+        print("MESSAGES COUNT RESULT", message_count)
+
+        supabase.table("usage_sessions").update({
+            "ended_at": ended_at.isoformat(),
+            "duration_seconds": duration_seconds,
+            "message_count": message_count,
+        }).eq("id", session_id).execute()
+
         all_messages_result = (
-        supabase.table("messages")
-        .select("id", count="exact")
-        .eq("user_id", user_id)
-        .execute()
-)
+            supabase.table("messages")
+            .select("id", count="exact")
+            .eq("user_id", user_id)
+            .execute()
+        )
 
         total_messages = all_messages_result.count or 0
 
-        supabase.table("retention_metrics").update({
-        "total_messages": total_messages
-        }).eq("user_id", user_id).execute()
+        print("RETENTION USER ID", user_id)
+        print("TOTAL MESSAGES", total_messages)
 
-
-        print("MESSAGES COUNT RESULT", message_count)
-        print(
-            "UPDATING SESSION",
-            {
-                "session_id": session_id,
-                "duration_seconds": duration_seconds,
-                "message_count": message_count,
-            },
+        retention_update_result = (
+            supabase.table("retention_metrics")
+            .update({
+                "total_messages": total_messages
+            })
+            .eq("user_id", user_id)
+            .execute()
         )
 
-        supabase.table("usage_sessions").update(
-            {
-                "ended_at": ended_at.isoformat(),
-                "duration_seconds": duration_seconds,
-                "message_count": message_count,
-            }
-        ).eq("id", session_id).execute()
+        print("RETENTION UPDATE RESULT", retention_update_result.data)
 
         return {"ok": True}
 
